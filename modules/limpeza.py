@@ -5,39 +5,13 @@ import asyncio
 from datetime import datetime
 import re
 
-# ========== CONFIGURAÇÃO ==========
-# Nomes dos cargos que podem usar comandos de limpeza
-STAFF_ROLES = [
-    "👑 | Lider | 00",
-    "💎 | Lider | 01",
-    "👮 | Lider | 02",
-    "🎖️ | Lider | 03",
-    "🎖️ | Gerente Geral",
-    "🎖️ | Gerente De Farm",
-    "🎖️ | Gerente De Pista",
-    "🎖️ | Gerente de Recrutamento",
-    "🎖️ | Supervisor",
-    "🎖️ | Recrutador",
-    "🎖️ | Ceo Elite",
-    "🎖️ | Sub Elite",
-]
+# Importar sistema ADM
+from adm_system import is_staff
 
 # ========== FUNÇÕES AUXILIARES ==========
 def usuario_pode_limpar(member: discord.Member) -> bool:
-    """Verifica se o usuário pode usar comandos de limpeza baseado nos cargos"""
-    if not member:
-        return False
-    
-    # Admin sempre pode
-    if member.guild_permissions.administrator:
-        return True
-    
-    # Verificar se tem cargo de staff
-    for role in member.roles:
-        if role.name in STAFF_ROLES:
-            return True
-    
-    return False
+    """Verifica se o usuário pode usar comandos de limpeza"""
+    return is_staff(member)
 
 # ========== VIEW DE CONFIRMAÇÃO ==========
 class ConfirmarLimpezaView(ui.View):
