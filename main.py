@@ -298,7 +298,7 @@ async def carregar_modulos():
     print("="*60)
     
     modulos = [
-        'modules.adm_sytem',
+        'modules.adm_system',
         'modules.limpeza',
         'modules.tickets',
     ]
