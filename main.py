@@ -104,32 +104,28 @@ keep_alive = KeepAliveServer()
 # ==================== EVENTO: DAR CARGO VISITANTE E MENSAGEM DE BOAS-VINDAS ====================
 @bot.event
 async def on_member_join(member):
-    """Quando alguém entra no servidor, dá o cargo 𝐕𝐢𝐬𝐢𝐭𝐚𝐧𝐭𝐞 e envia mensagem no canal 🚪entrada"""
+    """Quando alguém entra no servidor, dá o cargo 👾 𝐉𝐨𝐠𝐚𝐝𝐨𝐫𝐞𝐬 e envia mensagem no canal 🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨"""
     try:
         # 1. DAR CARGO VISITANTE
-        cargo_visitante = discord.utils.get(member.guild.roles, name="𝐕𝐢𝐬𝐢𝐭𝐚𝐧𝐭𝐞")
+        cargo_visitante = discord.utils.get(member.guild.roles, name="👾 𝐉𝐨𝐠𝐚𝐝𝐨𝐫𝐞𝐬")
         
         if cargo_visitante:
             await member.add_roles(cargo_visitante)
-            print(f"✅ Cargo 𝐕𝐢𝐬𝐢𝐭𝐚𝐧𝐭𝐞 dado para {member.name}")
+            print(f"✅ Cargo 👾 𝐉𝐨𝐠𝐚𝐝𝐨𝐫𝐞𝐬 dado para {member.name}")
         else:
-            print(f"⚠️ Cargo 𝐕𝐢𝐬𝐢𝐭𝐚𝐧𝐭𝐞 não encontrado no servidor {member.guild.name}")
+            print(f"⚠️ Cargo 👾 𝐉𝐨𝐠𝐚𝐝𝐨𝐫𝐞𝐬 não encontrado no servidor {member.guild.name}")
         
         # 2. ENVIAR MENSAGEM DE BOAS-VINDAS NO CANAL 🚪entrada
-        canal_entrada = discord.utils.get(member.guild.text_channels, name="🚪entrada")
+        canal_entrada = discord.utils.get(member.guild.text_channels, name="🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨")
         
         if canal_entrada:
             # Criar embed com a foto do usuário
             embed = discord.Embed(
                 description=(
                     f"## 👋 Bem-vindo(a), {member.mention}!\n"
-                    f"Seja muito bem-vindo(a) ao **ISRAEL** 💸🔫🇮🇱!\n\n"
+                    f"Seja muito bem-vindo(a) ao **Reycraft HC**\n\n"
                     f"**👤 Total de membros:** {member.guild.member_count}\n\n"
-                    f"**💡 Para fazer seu set:**\n"
-                    f"> 1. Vá para <#pedir-set> ou <#𝐏𝐞𝐝𝐢𝐫-𝐬𝐞𝐭!>\n"
-                    f"> 2. Clique em **'Peça seu Set!'**\n"
-                    f"> 3. Digite seu **ID do FiveM**\n"
-                    f"> 4. Aguarde aprovação da staff!\n\n"
+                    f"> Olá {member.mention} agradecemos muito por vir ao nosso servidor, peço que va para o canal <#📜・𝐑𝐞𝐠𝐫𝐚𝐬-𝐦𝐢𝐧𝐞𝐜𝐫𝐚𝐟𝐭> para saber doque se trata o nosso servidor\n"
                     f"Seja Bem-vindo! Esperamos que goste!"
                 ),
                 color=discord.Color.purple()
@@ -139,14 +135,14 @@ async def on_member_join(member):
             embed.set_thumbnail(url=member.display_avatar.url)
             
             # Adicionar imagem opcional (a que você mencionou)
-            embed.set_image(url="https://cdn.discordapp.com/attachments/1462123097627820348/1485738959760920696/07F15636-DD7A-40CD-8257-703F7254123F.png")
+            embed.set_image(url="https://cdn.discordapp.com/attachments/1386344818833363006/1515474727915749416/banner.png?ex=6a2f2353&is=6a2dd1d3&hm=b36ad4b6ae2e03562536837f795a1f8758cca17c5e71cf0a82c8b774d84caf34&")
             
             embed.set_footer(text=f"ID: {member.id} | Entrou em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
             
             await canal_entrada.send(embed=embed)
-            print(f"✅ Mensagem de boas-vindas enviada para {member.name} no canal 🚪entrada")
+            print(f"✅ Mensagem de boas-vindas enviada para {member.name} no canal 🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨")
         else:
-            print(f"⚠️ Canal 🚪entrada não encontrado no servidor {member.guild.name}")
+            print(f"⚠️ Canal 🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨 não encontrado no servidor {member.guild.name}")
             
             # Tentar enviar em algum canal alternativo
             for channel in member.guild.text_channels:
@@ -154,13 +150,9 @@ async def on_member_join(member):
                     embed = discord.Embed(
                         description=(
                             f"## 👋 Bem-vindo(a), {member.mention}!\n"
-                            f"Seja muito bem-vindo(a) ao **ISRAEL** 💸🔫🇮🇱!\n\n"
+                            f"Seja muito bem-vindo(a) ao **Reycraft HC**\n\n"
                             f"**👤 Total de membros:** {member.guild.member_count}\n\n"
-                            f"**💡 Para fazer seu set:**\n"
-                            f"> 1. Vá para <#pedir-set>\n"
-                            f"> 2. Clique em **'Peça seu Set!'**\n"
-                            f"> 3. Digite seu **ID do FiveM**\n"
-                            f"> 4. Aguarde aprovação da staff!\n\n"
+                            f"> Olá {member.mention} agradecemos muito por vir ao nosso servidor, peço que va para o canal <#📜・𝐑𝐞𝐠𝐫𝐚𝐬-𝐦𝐢𝐧𝐞𝐜𝐫𝐚𝐟𝐭> para saber doque se trata o nosso servidor\n"
                             f"Seja Bem-vindo! Esperamos que goste!"
                         ),
                         color=discord.Color.purple()
@@ -179,7 +171,7 @@ async def on_member_join(member):
 async def help_command(ctx):
     """!help - Mostra todos os comandos"""
     embed = discord.Embed(
-        title="🤖 Comandos do Bot - ISRAEL",
+        title="🤖 Comandos do Bot - Reycraft HC",
         description="Lista de todos os comandos disponíveis:",
         color=discord.Color.purple()
     )
@@ -191,31 +183,17 @@ async def help_command(ctx):
               "`!status` - Status do bot\n"
               "`!info` - Informações do servidor",
         inline=False
-    )
-    
-    embed.add_field(
-        name="🎮 Sistema de Set",
-        value="`!setup_set` - Configurar painel de set (ADMIN)\n"
-              "`!check_id <id>` - Verifica se ID já está em uso\n"
-              "`!sets_pendentes` - Mostra pedidos pendentes\n"
-              "`!remover_visitante <@user>` - Remove cargo visitante",
-        inline=False
+
     )
     
     embed.add_field(
         name="🎫 Sistema de Tickets",
         value="`!setup_tickets` - Configurar painel de tickets (ADMIN)",
         inline=False
+
     )
     
-    embed.add_field(
-        name="⚙️ Sistema de Cargos",
-        value="`!setup_cargos` - Configurar painel de cargos (ADMIN)\n"
-              "`!fixnick [@user]` - Corrige nickname do usuário",
-        inline=False
-    )
-    
-    embed.set_footer(text="ISRAEL • Use os comandos com responsabilidade")
+    embed.set_footer(text="Reycraft HC • Use os comandos com responsabilidade")
     
     await ctx.send(embed=embed)
 
@@ -279,7 +257,7 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
-            name=f"{len(bot.guilds)} servidores | !help"
+            name=f"{len(bot.guilds)} ReyCraft HC | Moderando 🧐 "
         )
     )
     
@@ -320,8 +298,8 @@ async def carregar_modulos():
     print("="*60)
     
     modulos = [
-        'modules.cargos',
-        'modules.sets',
+        'modules.adm_sytem',
+        'modules.limpeza',
         'modules.tickets',
     ]
     
