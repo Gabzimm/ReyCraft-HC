@@ -192,6 +192,24 @@ async def help_command(ctx):
         inline=False
 
     )
+
+    embed.add_field(
+        name="🧹 Sistema de Limpeza",
+        value="`!limpar` - painel de limpeza (ADMIN)",
+              "`!limpar` 10 - limpar 10 mensagens (ADMIN)",
+              "`!limpar` 50 - limpar 50 mensagens (ADMIN)",
+              "`!limpar` 100 - limpar 100 mensagens (ADMIN)",
+              "`!limpar` 999 - limpar 999 mensagens (ADMIN)",
+        inline=False
+
+    )
+
+    embed.add_field(
+        name="👑 Sistema de adcionar ADMs",
+        value="`!adm` - painel de Adcionar ADMs (Somente os OWNER consegue add)",
+        inline=False
+
+    )
     
     embed.set_footer(text="Reycraft HC • Use os comandos com responsabilidade")
     
@@ -253,12 +271,9 @@ async def on_ready():
     for i, guild in enumerate(bot.guilds, 1):
         print(f"   {i}. {guild.name} - {guild.member_count} membros")
     
-    # Status personalizado
+    # Status personalizado - JOGANDO
     await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name=f"{len(bot.guilds)} ReyCraft HC | Moderando 🧐 "
-        )
+        activity=discord.Game(name="ReyCraft HC | Moderando 🧐")
     )
     
     print("\n🚀 BOT PRONTO!")
@@ -274,9 +289,9 @@ async def on_guild_join(guild):
                 title="👋 Obrigado por me adicionar!",
                 description="Use **!help** para ver todos os comandos!\n\n"
                           "**Comandos importantes:**\n"
-                          "• `!setup_set` - Configurar painel de set\n"
-                          "• `!setup_tickets` - Configurar painel de tickets\n"
-                          "• `!setup_cargos` - Configurar painel de cargos",
+                          "• `!adm` -  painel de adcionar ADMs\n"
+                          "• `!setup_tickets` - Configurar painel de ticket\n"
+                          "• `!limpar` -  painel de Limpeza",
                 color=discord.Color.green()
             )
             await channel.send(embed=embed)
@@ -298,6 +313,7 @@ async def carregar_modulos():
     print("="*60)
     
     modulos = [
+        'utils.memory',
         'modules.adm_system',
         'modules.limpeza',
         'modules.tickets',
