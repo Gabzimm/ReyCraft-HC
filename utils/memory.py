@@ -1,12 +1,12 @@
+# utils/memory.py
 import json
 import os
 from datetime import datetime
 
-# ========== ARQUIVO ÚNICO PARA TODAS AS CONFIGURAÇÕES ==========
 CONFIG_FILE = "bot_memory.json"
 
 def load_all_data():
-    """Carrega TODOS os dados salvos automaticamente"""
+    """Carrega TODOS os dados salvos"""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r") as f:
@@ -16,12 +16,13 @@ def load_all_data():
     return {}
 
 def save_all_data(data):
-    """Salva TODOS os dados automaticamente"""
+    """Salva TODOS os dados"""
     try:
         with open(CONFIG_FILE, "w") as f:
             json.dump(data, f, indent=4)
         return True
-    except:
+    except Exception as e:
+        print(f"Erro ao salvar dados: {e}")
         return False
 
 def save_guild_data(guild_id, key, value):
