@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import ui, ButtonStyle
 import json
 import os
+import asyncio
 
 # ========== ARQUIVO DE CONFIGURAÇÃO ==========
 DATA_FILE = "adm_roles.json"
@@ -10,14 +11,20 @@ DATA_FILE = "adm_roles.json"
 def load_adm_roles():
     """Carrega a lista de cargos ADM do arquivo"""
     if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
+        try:
+            with open(DATA_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
     return []
 
 def save_adm_roles(roles):
     """Salva a lista de cargos ADM no arquivo"""
-    with open(DATA_FILE, "w") as f:
-        json.dump(roles, f, indent=4)
+    try:
+        with open(DATA_FILE, "w") as f:
+            json.dump(roles, f, indent=4)
+    except Exception as e:
+        print(f"Erro ao salvar ADM roles: {e}")
 
 # ========== FUNÇÃO AUXILIAR PARA VERIFICAR PERMISSÃO ==========
 def is_staff(member: discord.Member) -> bool:
@@ -42,6 +49,15 @@ def is_staff(member: discord.Member) -> bool:
             return True
     
     return False
+
+# ========== FUNÇÃO PARA APAGAR MENSAGEM DEPOIS DE TEMPO ==========
+async def delete_after(ctx, message, delay=3):
+    """Apaga uma mensagem após X segundos"""
+    await asyncio.sleep(delay)
+    try:
+        await message.delete()
+    except:
+        pass
 
 # ========== MODAL PARA ESCOLHER CARGO ==========
 class EscolherCargoModal(ui.Modal, title="➕ Adicionar Cargo ADM"):
@@ -175,12 +191,15 @@ class AdmPainelView(ui.View):
         self.cog = cog
         self.ctx = ctx
     
-    @ui.button(label="➕ Adicionar ADM", style=ButtonStyle.success, emoji="➕", row=0)
-    async def add_adm(self, interaction: discord.Interaction, button: ui.Button):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Verifica se quem clicou é o dono"""
         if interaction.user != self.ctx.author:
             await interaction.response.send_message("❌ Apenas o dono pode usar este painel!", ephemeral=True)
-            return
-        
+            return False
+        return True
+    
+    @ui.button(label="➕ Adicionar ADM", style=ButtonStyle.success, emoji="➕", row=0)
+    async def add_adm(self, interaction: discord.Interaction, button: ui.Button):
         embed = discord.Embed(
             title="➕ Adicionar Cargo ADM",
             description=(
@@ -219,10 +238,6 @@ class AdmPainelView(ui.View):
     
     @ui.button(label="➖ Remover ADM", style=ButtonStyle.danger, emoji="➖", row=0)
     async def remove_adm(self, interaction: discord.Interaction, button: ui.Button):
-        if interaction.user != self.ctx.author:
-            await interaction.response.send_message("❌ Apenas o dono pode usar este painel!", ephemeral=True)
-            return
-        
         adm_roles = load_adm_roles()
         
         if not adm_roles:
@@ -272,10 +287,6 @@ class AdmPainelView(ui.View):
     
     @ui.button(label="📋 Lista de ADMs", style=ButtonStyle.secondary, emoji="📋", row=1)
     async def list_adms(self, interaction: discord.Interaction, button: ui.Button):
-        if interaction.user != self.ctx.author:
-            await interaction.response.send_message("❌ Apenas o dono pode usar este painel!", ephemeral=True)
-            return
-        
         adm_roles = load_adm_roles()
         
         if not adm_roles:
@@ -322,8 +333,17 @@ class AdmCog(commands.Cog):
         
         # Verificar se é o dono
         if ctx.author.id != ctx.guild.owner_id:
-            await ctx.send("❌ **Apenas o Dono do servidor pode usar este comando!**", delete_after=10)
+            msg = await ctx.send("❌ **Apenas o Dono do servidor pode usar este comando!**")
+            await asyncio.sleep(3)
+            await msg.delete()
+            await ctx.message.delete()
             return
+        
+        # Apagar o comando do usuário
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         
         adm_roles = load_adm_roles()
         
