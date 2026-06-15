@@ -101,6 +101,30 @@ class KeepAliveServer:
 # Criar instância do keep-alive
 keep_alive = KeepAliveServer()
 
+# ==================== STATUS ALTERNANDO AUTOMÁTICO ====================
+async def alternar_status():
+    await bot.wait_until_ready()
+    
+    # Lista com (status, tempo_em_segundos)
+    statuses = [
+        ("❤️ Bem-vindo ao ReyCraft HC ", 20),
+        ("ReyCraft HC melhor servidor ❤️", 20),   # 20 segundos
+        ("Melhor ping pro BR e PT 📶", 15),   # 15 segundos
+        ("🔥 Hardcore de Qualidade", 10),      # 10 segundos
+        ("Eventos exclusivos 💥", 15),  # 15 segundos
+    ]
+    
+    index = 0
+    while not bot.is_closed():
+        try:
+            status, tempo = statuses[index % len(statuses)]
+            await bot.change_presence(activity=discord.Game(name=status))
+            index += 1
+            await asyncio.sleep(tempo)  # Usa o tempo específico de cada status
+        except Exception as e:
+            print(f"Erro ao mudar status: {e}")
+            await asyncio.sleep(30)
+
 # ==================== EVENTO: DAR CARGO VISITANTE E MENSAGEM DE BOAS-VINDAS ====================
 @bot.event
 async def on_member_join(member):
@@ -115,7 +139,17 @@ async def on_member_join(member):
         else:
             print(f"⚠️ Cargo 👾 𝐉𝐨𝐠𝐚𝐝𝐨𝐫𝐞𝐬 não encontrado no servidor {member.guild.name}")
         
-        # 2. ENVIAR MENSAGEM DE BOAS-VINDAS NO CANAL 🚪entrada
+        # 2. PEGAR O ID DO CANAL DE REGRAS (SUBSTITUA PELO SEU ID!)
+        canal_regras_id = 1357133841453678653  # ← COLOQUE O ID DO SEU CANAL AQUI!
+        canal_regras = member.guild.get_channel(canal_regras_id)
+        
+        if canal_regras:
+            canal_mention = canal_regras.mention
+        else:
+            canal_mention = "**canal de regras**"
+            print(f"⚠️ Canal de regras não encontrado! ID: {canal_regras_id}")
+        
+        # 3. ENVIAR MENSAGEM DE BOAS-VINDAS NO CANAL
         canal_entrada = discord.utils.get(member.guild.text_channels, name="🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨")
         
         if canal_entrada:
@@ -125,42 +159,25 @@ async def on_member_join(member):
                     f"## 👋 Bem-vindo(a), {member.mention}!\n"
                     f"Seja muito bem-vindo(a) ao **Reycraft HC**\n\n"
                     f"**👤 Total de membros:** {member.guild.member_count}\n\n"
-                    f"> Olá {member.mention} agradecemos muito por vir ao nosso servidor, peço que va para o canal <#📜・𝐑𝐞𝐠𝐫𝐚𝐬-𝐦𝐢𝐧𝐞𝐜𝐫𝐚𝐟𝐭> para saber doque se trata o nosso servidor\n"
+                    f"> Olá {member.mention} agradecemos muito por vir ao nosso servidor, peço que vá para o canal {canal_mention} para saber as regras do nosso servidor\n"
                     f"Seja Bem-vindo! Esperamos que goste!"
                 ),
                 color=discord.Color.purple()
             )
             
-            # Adicionar thumbnail com a foto do usuário (mini foto)
+            # Adicionar thumbnail com a foto do usuário
             embed.set_thumbnail(url=member.display_avatar.url)
             
-            # Adicionar imagem opcional (a que você mencionou)
+            # Adicionar imagem opcional
             embed.set_image(url="https://cdn.discordapp.com/attachments/1386344818833363006/1515474727915749416/banner.png?ex=6a2f2353&is=6a2dd1d3&hm=b36ad4b6ae2e03562536837f795a1f8758cca17c5e71cf0a82c8b774d84caf34&")
             
             embed.set_footer(text=f"ID: {member.id} | Entrou em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
             
             await canal_entrada.send(embed=embed)
-            print(f"✅ Mensagem de boas-vindas enviada para {member.name} no canal 🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨")
+            print(f"✅ Mensagem de boas-vindas enviada para {member.name} no canal {canal_entrada.name}")
         else:
             print(f"⚠️ Canal 🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨 não encontrado no servidor {member.guild.name}")
             
-            # Tentar enviar em algum canal alternativo
-            for channel in member.guild.text_channels:
-                if channel.permissions_for(member.guild.me).send_messages:
-                    embed = discord.Embed(
-                        description=(
-                            f"## 👋 Bem-vindo(a), {member.mention}!\n"
-                            f"Seja muito bem-vindo(a) ao **Reycraft HC**\n\n"
-                            f"**👤 Total de membros:** {member.guild.member_count}\n\n"
-                            f"> Olá {member.mention} agradecemos muito por vir ao nosso servidor, peço que va para o canal <#📜・𝐑𝐞𝐠𝐫𝐚𝐬-𝐦𝐢𝐧𝐞𝐜𝐫𝐚𝐟𝐭> para saber doque se trata o nosso servidor\n"
-                            f"Seja Bem-vindo! Esperamos que goste!"
-                        ),
-                        color=discord.Color.purple()
-                    )
-                    embed.set_thumbnail(url=member.display_avatar.url)
-                    await channel.send(embed=embed)
-                    break
-                    
     except discord.Forbidden:
         print(f"❌ Sem permissão para dar cargo em {member.guild.name}")
     except Exception as e:
@@ -271,10 +288,8 @@ async def on_ready():
     for i, guild in enumerate(bot.guilds, 1):
         print(f"   {i}. {guild.name} - {guild.member_count} membros")
     
-    # Status personalizado - JOGANDO
-    await bot.change_presence(
-        activity=discord.Game(name="ReyCraft HC | Moderando 🧐")
-    )
+    # INICIAR STATUS ALTERNANDO
+    bot.loop.create_task(alternar_status())
     
     print("\n🚀 BOT PRONTO!")
     print("="*60)
