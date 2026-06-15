@@ -3,22 +3,17 @@ from discord.ext import commands
 from discord import ui, ButtonStyle
 import asyncio
 from datetime import datetime
-import json
 import os
 
-# Importar sistema ADM
-try:
-    from modules.adm_system import is_staff
-except ImportError:
-    from adm_system import is_staff
+# ========== IMPORTAR SISTEMA ADM ==========
+from modules.adm_system import is_staff, load_adm_roles
 
 # ========== CONFIGURAÇÕES ==========
-# ID do canal onde o select menu será postado
-CANAL_TICKET_ID = 1332371959308095560  # ← SEU ID DO CANAL
+CANAL_TICKET_ID = 1332371959308095560  # ID do canal onde o painel será postado
 
 # Controle de staff assumindo tickets
-staff_tickets = {}
-ultimo_chamado = {}
+staff_tickets = {}  # {staff_id: channel_id}
+ultimo_chamado = {}  # {channel_id: timestamp}
 
 # ========== FUNÇÃO PARA SALVAR TRANSCRIPT ==========
 async def salvar_transcript(channel, messages):
@@ -86,35 +81,39 @@ async def salvar_transcript(channel, messages):
     
     return filename
 
-# ========== VIEW DE REABRIR TICKET (APENAS STAFF) ==========
+# ========== VIEW DE REABRIR TICKET ==========
 class TicketReabrirView(ui.View):
     def __init__(self, ticket_channel, ticket_owner_id, categoria):
-        super().__init__(timeout=30)
+        super().__init__(timeout=None)
         self.ticket_channel = ticket_channel
         self.ticket_owner_id = ticket_owner_id
         self.categoria = categoria
     
-    @ui.button(label="✅ Sim, reabrir ticket", style=ButtonStyle.success)
+    @ui.button(label="✅ Sim, reabrir ticket", style=ButtonStyle.success, custom_id="reabrir_confirmar")
     async def confirmar(self, interaction: discord.Interaction, button: ui.Button):
         if not is_staff(interaction.user):
-            msg = await interaction.response.send_message("❌ Apenas staff pode reabrir tickets!", ephemeral=True)
-            await asyncio.sleep(5)
-            await msg.delete()
+            await interaction.response.send_message("❌ Apenas staff pode reabrir tickets!", ephemeral=True)
             return
         
         await interaction.response.defer()
         
+        # Restaurar permissão do owner
         overwrites = self.ticket_channel.overwrites
-        for target, overwrite in overwrites.items():
-            if isinstance(target, discord.Role) and target.name == "@everyone":
-                overwrite.send_messages = True
+        try:
+            owner = await interaction.client.fetch_user(self.ticket_owner_id)
+            if isinstance(owner, discord.Member):
+                overwrites[owner].send_messages = True
+        except:
+            pass
         
         await self.ticket_channel.edit(overwrites=overwrites)
         
+        # Remover 🔒 do nome
         if self.ticket_channel.name.startswith("🔒"):
             novo_nome = self.ticket_channel.name[2:]
             await self.ticket_channel.edit(name=novo_nome)
         
+        # Enviar novo painel
         painel_view = TicketPainelView(self.ticket_owner_id, self.ticket_channel, self.categoria)
         embed = painel_view.criar_embed()
         
@@ -124,12 +123,17 @@ class TicketReabrirView(ui.View):
             view=painel_view
         )
         
-        await interaction.message.delete()
+        # Desabilitar esta view
+        for item in self.children:
+            item.disabled = True
+        await interaction.message.edit(view=self)
     
-    @ui.button(label="❌ Cancelar", style=ButtonStyle.secondary)
+    @ui.button(label="❌ Cancelar", style=ButtonStyle.secondary, custom_id="reabrir_cancelar")
     async def cancelar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
-        await interaction.message.delete()
+        for item in self.children:
+            item.disabled = True
+        await interaction.message.edit(view=self)
 
 # ========== CONFIRMAR FECHAMENTO ==========
 class ConfirmarFechamentoView(ui.View):
@@ -139,29 +143,26 @@ class ConfirmarFechamentoView(ui.View):
         self.ticket_channel = ticket_channel
         self.categoria = categoria
     
-    @ui.button(label="✅ Sim, fechar", style=ButtonStyle.danger)
+    @ui.button(label="✅ Sim, fechar", style=ButtonStyle.danger, custom_id="fechar_confirmar")
     async def confirmar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         
+        # Coletar mensagens
         messages = []
         async for msg in self.ticket_channel.history(limit=1000, oldest_first=True):
             messages.append(msg)
         
+        # Salvar transcript
         transcript_file = await salvar_transcript(self.ticket_channel, messages)
         
+        # Enviar para o owner
         instrucoes = (
             "📋 **TRANSCRIPT DO SEU TICKET**\n\n"
             "Seu ticket foi fechado. Abaixo está o transcript (histórico) da conversa.\n\n"
-            "**📌 COMO VISUALIZAR O TRANSCRIPT:**\n"
-            "1️⃣ **Baixe o arquivo** anexado abaixo\n"
-            "2️⃣ **Abra seu navegador** (Chrome, Firefox, Edge, Safari)\n"
-            "3️⃣ **Arraste o arquivo** para dentro do navegador OU clique duas vezes nele\n"
-            "4️⃣ O transcript será exibido como uma página HTML com todo o histórico\n\n"
-            "**💡 DICAS:**\n"
-            "• O arquivo é um HTML (página da web) - é 100% seguro\n"
-            "• Você pode salvar esta página nos favoritos se quiser guardar\n"
-            "• Se tiver dificuldade, copie o arquivo para o computador e abra com qualquer navegador\n\n"
-            "⚠️ Este arquivo contém todo o histórico do seu atendimento. Guarde-o se precisar consultar depois.\n\n"
+            "**📌 COMO VISUALIZAR:**\n"
+            "1️⃣ Baixe o arquivo anexado\n"
+            "2️⃣ Abra com qualquer navegador (Chrome, Firefox, Edge)\n"
+            "3️⃣ O transcript será exibido como uma página HTML\n\n"
             f"📅 **Ticket fechado em:** {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}"
         )
         
@@ -170,27 +171,33 @@ class ConfirmarFechamentoView(ui.View):
             with open(transcript_file, "rb") as f:
                 await user.send(instrucoes, file=discord.File(f, transcript_file))
             print(f"✅ Transcript enviado para {user.name}")
-        except:
-            print(f"❌ Não foi possível enviar DM para {self.ticket_owner_id}")
+        except Exception as e:
+            print(f"❌ Não foi possível enviar DM: {e}")
         
+        # Limpar staff_tickets
         for staff_id, channel_id in list(staff_tickets.items()):
             if channel_id == self.ticket_channel.id:
                 del staff_tickets[staff_id]
         
+        # Bloquear canal
         if not self.ticket_channel.name.startswith("🔒"):
             await self.ticket_channel.edit(name=f"🔒{self.ticket_channel.name}")
         
+        # Remover permissão de enviar mensagens
         overwrites = self.ticket_channel.overwrites
         overwrites[self.ticket_channel.guild.default_role].send_messages = False
         
         try:
             user = await interaction.client.fetch_user(self.ticket_owner_id)
-            overwrites[user].send_messages = False
+            member = self.ticket_channel.guild.get_member(user.id)
+            if member:
+                overwrites[member].send_messages = False
         except:
             pass
         
         await self.ticket_channel.edit(overwrites=overwrites)
         
+        # Mensagem de fechado
         embed_fechado = discord.Embed(
             title="🔒 TICKET FECHADO",
             description=f"Este ticket foi fechado por {interaction.user.mention}\n\nSe precisar reabrir, clique no botão abaixo (apenas staff).",
@@ -199,12 +206,17 @@ class ConfirmarFechamentoView(ui.View):
         
         reabrir_view = TicketReabrirView(self.ticket_channel, self.ticket_owner_id, self.categoria)
         
+        # Limpar view antiga
         await interaction.message.edit(view=None)
         await self.ticket_channel.send(embed=embed_fechado, view=reabrir_view)
         
-        os.remove(transcript_file)
+        # Remover arquivo temporário
+        try:
+            os.remove(transcript_file)
+        except:
+            pass
     
-    @ui.button(label="❌ Cancelar", style=ButtonStyle.secondary)
+    @ui.button(label="❌ Cancelar", style=ButtonStyle.secondary, custom_id="fechar_cancelar")
     async def cancelar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         await interaction.message.delete()
@@ -215,17 +227,30 @@ class ConfirmarDelecaoView(ui.View):
         super().__init__(timeout=30)
         self.ticket_channel = ticket_channel
     
-    @ui.button(label="✅ Sim, deletar", style=ButtonStyle.danger)
+    @ui.button(label="✅ Sim, deletar", style=ButtonStyle.danger, custom_id="deletar_confirmar")
     async def confirmar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
+        
+        # Avisar owner
+        try:
+            # Extrair ID do owner do tópico
+            if self.ticket_channel.topic:
+                for word in self.ticket_channel.topic.split():
+                    if word.isdigit() and len(word) >= 17:
+                        user = await interaction.client.fetch_user(int(word))
+                        await user.send("🗑️ Seu ticket foi deletado pela equipe de suporte.")
+                        break
+        except:
+            pass
+        
         await self.ticket_channel.delete()
     
-    @ui.button(label="❌ Cancelar", style=ButtonStyle.secondary)
+    @ui.button(label="❌ Cancelar", style=ButtonStyle.secondary, custom_id="deletar_cancelar")
     async def cancelar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         await interaction.message.delete()
 
-# ========== PAINEL FIXO DO TICKET (BOTÕES DENTRO DO TICKET) ==========
+# ========== PAINEL FIXO DO TICKET ==========
 class TicketPainelView(ui.View):
     def __init__(self, ticket_owner_id, ticket_channel, categoria):
         super().__init__(timeout=None)
@@ -234,129 +259,6 @@ class TicketPainelView(ui.View):
         self.categoria = categoria
         self.assumido_por = None
     
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return True
-    
-    @ui.button(label="🔒 Fechar Ticket", style=ButtonStyle.gray, emoji="🔒", row=0)
-    async def fechar_ticket(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer()
-        
-        embed = discord.Embed(
-            title="🔒 Fechar Ticket",
-            description="Tem certeza que deseja fechar este ticket?",
-            color=discord.Color.orange()
-        )
-        
-        view = ConfirmarFechamentoView(self.ticket_owner_id, self.ticket_channel, self.categoria)
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-    
-    @ui.button(label="🗑️ Deletar Ticket", style=ButtonStyle.red, emoji="🗑️", row=0)
-    async def deletar_ticket(self, interaction: discord.Interaction, button: ui.Button):
-        if not is_staff(interaction.user):
-            msg = await interaction.response.send_message("❌ Apenas a equipe de suporte pode deletar tickets!", ephemeral=True)
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
-        
-        embed = discord.Embed(
-            title="🗑️ Deletar Ticket",
-            description="⚠️ **ATENÇÃO!** Isso irá deletar o ticket permanentemente!\n\nTem certeza?",
-            color=discord.Color.red()
-        )
-        
-        view = ConfirmarDelecaoView(self.ticket_channel)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-    
-    @ui.button(label="📌 Assumir Ticket", style=ButtonStyle.success, emoji="📌", row=1)
-    async def assumir_ticket(self, interaction: discord.Interaction, button: ui.Button):
-        if not is_staff(interaction.user):
-            msg = await interaction.response.send_message("❌ Apenas a equipe de suporte pode assumir tickets!", ephemeral=True)
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
-        
-        if interaction.user.id in staff_tickets:
-            canal_atual = self.ticket_channel.guild.get_channel(staff_tickets[interaction.user.id])
-            msg = await interaction.response.send_message(
-                f"❌ Você já está atendendo um ticket: {canal_atual.mention if canal_atual else 'Desconhecido'}\nFinalize ele antes de assumir outro!",
-                ephemeral=True
-            )
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
-        
-        await interaction.response.defer()
-        
-        staff_tickets[interaction.user.id] = self.ticket_channel.id
-        self.assumido_por = interaction.user
-        
-        embed = self.criar_embed()
-        embed.description += f"\n\n**👑 Responsável:** {interaction.user.mention}"
-        
-        self.clear_items()
-        self.add_item(ui.Button(label="🔒 Fechar Ticket", style=ButtonStyle.gray, emoji="🔒", row=0, custom_id="fechar"))
-        self.add_item(ui.Button(label="🗑️ Deletar Ticket", style=ButtonStyle.red, emoji="🗑️", row=0, custom_id="deletar"))
-        self.add_item(ui.Button(label="📞 Chamar Responsável", style=ButtonStyle.blurple, emoji="📞", row=1, custom_id="chamar"))
-        
-        await interaction.message.edit(embed=embed, view=self)
-        await interaction.followup.send(f"✅ {interaction.user.mention} assumiu o ticket!")
-    
-    @ui.button(label="📞 Chamar Responsável", style=ButtonStyle.blurple, emoji="📞", row=1)
-    async def chamar_responsavel(self, interaction: discord.Interaction, button: ui.Button):
-        if self.assumido_por is None:
-            msg = await interaction.response.send_message("❌ Ninguém assumiu este ticket ainda!", ephemeral=True)
-            await asyncio.sleep(5)
-            await msg.delete()
-            return
-        
-        canal_id = self.ticket_channel.id
-        agora = datetime.now().timestamp()
-        
-        if canal_id in ultimo_chamado:
-            tempo_passado = agora - ultimo_chamado[canal_id]
-            if tempo_passado < 360:
-                restante = int(360 - tempo_passado)
-                minutos = restante // 60
-                segundos = restante % 60
-                msg = await interaction.response.send_message(
-                    f"⏰ Espere {minutos} minutos e {segundos} segundos para chamar novamente!",
-                    ephemeral=True
-                )
-                await asyncio.sleep(5)
-                await msg.delete()
-                return
-        
-        ultimo_chamado[canal_id] = agora
-        
-        await interaction.response.defer()
-        
-        embed_chamada = discord.Embed(
-            title="📞 CHAMANDO RESPONSÁVEL",
-            description=(
-                f"{self.assumido_por.mention}\n\n"
-                f"O jogador {interaction.user.mention} está te chamando para finalizar o atendimento."
-            ),
-            color=discord.Color.blue()
-        )
-        
-        await self.ticket_channel.send(embed=embed_chamada)
-        
-        try:
-            embed_dm = discord.Embed(
-                title="⚠️ ATENDIMENTO PENDENTE",
-                description=f"Finalize o atendimento do ticket **#{self.ticket_channel.name}**",
-                color=discord.Color.red()
-            )
-            
-            view = ui.View()
-            view.add_item(ui.Button(label="🔗 Ir para o ticket", style=discord.ButtonStyle.link, url=self.ticket_channel.jump_url))
-            
-            await self.assumido_por.send(embed=embed_dm, view=view)
-        except:
-            pass
-        
-        await interaction.followup.send("✅ Responsável chamado!", ephemeral=True)
-    
     def criar_embed(self):
         embeds = {
             "🚨 Denúncia de Jogador": discord.Embed(
@@ -364,9 +266,9 @@ class TicketPainelView(ui.View):
                 description=(
                     "Obrigado por abrir este ticket.\n\n"
                     "Para que a denúncia seja analisada corretamente, envie todas as informações necessárias, "
-                    "como o nome do jogador envolvido, aproximado do ocorrido e uma descrição detalhada da situação.\n\n"
-                    "📌 **Mande as provas que você possui**, como prints, vídeos ou gravações, envie-as neste ticket. "
-                    "Caso não tiver provas essa denúncia não ira dar continuidade\n\n"
+                    "como o nome do jogador envolvido, horário aproximado do ocorrido e uma descrição detalhada da situação.\n\n"
+                    "📌 **Mande as provas que você possui**, como prints, vídeos ou gravações. "
+                    "Caso não tiver provas, essa denúncia não terá continuidade.\n\n"
                     "⚠️ Informações falsas ou denúncias feitas de má-fé poderão resultar em punições ou até mesmo em banimento.\n\n"
                     "Aguarde pacientemente até que um membro da equipe assuma seu atendimento."
                 ),
@@ -376,8 +278,8 @@ class TicketPainelView(ui.View):
                 title="💎 ADQUIRIR VIP",
                 description=(
                     "Obrigado pelo seu interesse em apoiar o servidor.\n\n"
-                    "Informe qual VIP você deseja adquirir e, caso tenha alguma dúvida, descreva-a para que possamos ajudá-lo, "
-                    "a equipe fornecerá todas as instruções necessárias para concluir a compra com segurança.\n\n"
+                    "Informe qual VIP você deseja adquirir e, caso tenha alguma dúvida, descreva-a para que possamos ajudá-lo. "
+                    "A equipe fornecerá todas as instruções necessárias para concluir a compra com segurança.\n\n"
                     "⚠️ Nunca realize pagamentos sem a confirmação e orientação da equipe oficial do servidor.\n\n"
                     "Aguarde até que um membro da equipe assuma seu atendimento."
                 ),
@@ -410,8 +312,120 @@ class TicketPainelView(ui.View):
             )
         }
         return embeds.get(self.categoria, embeds["📋 Outro Assunto"])
+    
+    @ui.button(label="🔒 Fechar Ticket", style=ButtonStyle.gray, emoji="🔒", custom_id="ticket_fechar", row=0)
+    async def fechar_ticket(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        
+        embed = discord.Embed(
+            title="🔒 Fechar Ticket",
+            description="Tem certeza que deseja fechar este ticket?",
+            color=discord.Color.orange()
+        )
+        
+        view = ConfirmarFechamentoView(self.ticket_owner_id, self.ticket_channel, self.categoria)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+    
+    @ui.button(label="🗑️ Deletar Ticket", style=ButtonStyle.red, emoji="🗑️", custom_id="ticket_deletar", row=0)
+    async def deletar_ticket(self, interaction: discord.Interaction, button: ui.Button):
+        if not is_staff(interaction.user):
+            await interaction.response.send_message("❌ Apenas a equipe de suporte pode deletar tickets!", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        embed = discord.Embed(
+            title="🗑️ Deletar Ticket",
+            description="⚠️ **ATENÇÃO!** Isso irá deletar o ticket permanentemente!\n\nTem certeza?",
+            color=discord.Color.red()
+        )
+        
+        view = ConfirmarDelecaoView(self.ticket_channel)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+    
+    @ui.button(label="📌 Assumir Ticket", style=ButtonStyle.success, emoji="📌", custom_id="ticket_assumir", row=1)
+    async def assumir_ticket(self, interaction: discord.Interaction, button: ui.Button):
+        if not is_staff(interaction.user):
+            await interaction.response.send_message("❌ Apenas a equipe de suporte pode assumir tickets!", ephemeral=True)
+            return
+        
+        if interaction.user.id in staff_tickets:
+            canal_atual = self.ticket_channel.guild.get_channel(staff_tickets[interaction.user.id])
+            await interaction.response.send_message(
+                f"❌ Você já está atendendo um ticket: {canal_atual.mention if canal_atual else 'Desconhecido'}\nFinalize ele antes de assumir outro!",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer()
+        
+        staff_tickets[interaction.user.id] = self.ticket_channel.id
+        self.assumido_por = interaction.user
+        
+        embed = self.criar_embed()
+        embed.description += f"\n\n**👑 Responsável:** {interaction.user.mention}"
+        
+        # Recriar botões com custom_id corretos
+        self.clear_items()
+        self.add_item(ui.Button(label="🔒 Fechar Ticket", style=ButtonStyle.gray, emoji="🔒", custom_id="ticket_fechar", row=0))
+        self.add_item(ui.Button(label="🗑️ Deletar Ticket", style=ButtonStyle.red, emoji="🗑️", custom_id="ticket_deletar", row=0))
+        self.add_item(ui.Button(label="📞 Chamar Responsável", style=ButtonStyle.blurple, emoji="📞", custom_id="ticket_chamar", row=1))
+        
+        await interaction.message.edit(embed=embed, view=self)
+        await interaction.followup.send(f"✅ {interaction.user.mention} assumiu o ticket!", ephemeral=True)
+    
+    @ui.button(label="📞 Chamar Responsável", style=ButtonStyle.blurple, emoji="📞", custom_id="ticket_chamar", row=1)
+    async def chamar_responsavel(self, interaction: discord.Interaction, button: ui.Button):
+        if self.assumido_por is None:
+            await interaction.response.send_message("❌ Ninguém assumiu este ticket ainda!", ephemeral=True)
+            return
+        
+        canal_id = self.ticket_channel.id
+        agora = datetime.now().timestamp()
+        
+        # Cooldown de 6 minutos
+        if canal_id in ultimo_chamado:
+            tempo_passado = agora - ultimo_chamado[canal_id]
+            if tempo_passado < 360:
+                restante = int(360 - tempo_passado)
+                minutos = restante // 60
+                segundos = restante % 60
+                await interaction.response.send_message(
+                    f"⏰ Espere {minutos} minutos e {segundos} segundos para chamar novamente!",
+                    ephemeral=True
+                )
+                return
+        
+        ultimo_chamado[canal_id] = agora
+        await interaction.response.defer()
+        
+        # Mensagem no canal
+        embed_chamada = discord.Embed(
+            title="📞 CHAMANDO RESPONSÁVEL",
+            description=f"{self.assumido_por.mention}\n\nO jogador {interaction.user.mention} está te chamando para finalizar o atendimento.",
+            color=discord.Color.blue()
+        )
+        
+        await self.ticket_channel.send(embed=embed_chamada)
+        
+        # DM para o staff
+        try:
+            embed_dm = discord.Embed(
+                title="⚠️ ATENDIMENTO PENDENTE",
+                description=f"Finalize o atendimento do ticket **#{self.ticket_channel.name}**",
+                color=discord.Color.red()
+            )
+            
+            view_dm = ui.View()
+            view_dm.add_item(ui.Button(label="🔗 Ir para o ticket", style=discord.ButtonStyle.link, url=self.ticket_channel.jump_url))
+            
+            await self.assumido_por.send(embed=embed_dm, view=view_dm)
+        except:
+            pass
+        
+        await interaction.followup.send("✅ Responsável chamado!", ephemeral=True)
 
-# ========== SELECT MENU PARA ESCOLHER CATEGORIA (DIRETO, SEM BOTÃO) ==========
+# ========== SELECT MENU PARA ESCOLHER CATEGORIA ==========
 class CategoriaSelect(ui.Select):
     def __init__(self):
         options = [
@@ -420,7 +434,7 @@ class CategoriaSelect(ui.Select):
             discord.SelectOption(label="⛔ Denúncia Staff", value="denuncia_staff", emoji="⛔", description="Denuncie um membro da equipe"),
             discord.SelectOption(label="📋 Outro Assunto", value="outros", emoji="📋", description="Outros assuntos não listados acima"),
         ]
-        super().__init__(placeholder="🔽 Selecione o tipo de atendimento...", options=options, min_values=1, max_values=1)
+        super().__init__(placeholder="🔽 Selecione o tipo de atendimento...", options=options, min_values=1, max_values=1, custom_id="categoria_select")
     
     async def callback(self, interaction: discord.Interaction):
         categoria = self.values[0]
@@ -437,64 +451,70 @@ class CategoriaSelect(ui.Select):
     async def criar_ticket(self, interaction: discord.Interaction, categoria, nome_categoria):
         await interaction.response.defer(ephemeral=True)
         
-        # Encontrar a categoria do canal especificado
-        canal_base = interaction.guild.get_channel(CANAL_TICKET_ID)
-        if not canal_base:
-            await interaction.followup.send("❌ Canal de tickets não encontrado! Contate um administrador.", ephemeral=True)
-            return
-        
-        categoria_parent = canal_base.category
-        
-        # Verificar se já tem ticket aberto
-        for channel in categoria_parent.channels:
-            if isinstance(channel, discord.TextChannel):
-                if channel.topic and str(interaction.user.id) in channel.topic:
-                    await interaction.followup.send(f"❌ Você já tem um ticket aberto: {channel.mention}", ephemeral=True)
-                    return
-        
-        # Configurar permissões
-        overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, read_message_history=True),
-            interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
-        }
-        
-        # Adicionar staff roles
-        from modules.adm_system import load_adm_roles
-        for role_name in load_adm_roles():
-            role = discord.utils.get(interaction.guild.roles, name=role_name)
-            if role:
-                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        
-        # Adicionar cargo Owner (qualquer cargo com Owner no nome)
-        for role in interaction.guild.roles:
-            if "owner" in role.name.lower():
-                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        
-        # Criar canal do ticket
-        nome_canal = f"🎫-{interaction.user.name[:20]}-{categoria[:3]}"
-        ticket_channel = await interaction.guild.create_text_channel(
-            name=nome_canal,
-            category=categoria_parent,
-            overwrites=overwrites,
-            topic=f"{categoria} | {interaction.user.id}",
-            reason=f"Ticket criado por {interaction.user.name}"
-        )
-        
-        # Enviar painel fixo dentro do ticket
-        painel_view = TicketPainelView(interaction.user.id, ticket_channel, nome_categoria)
-        embed = painel_view.criar_embed()
-        
-        await ticket_channel.send(f"🎫 **Ticket aberto por:** {interaction.user.mention}", embed=embed, view=painel_view)
-        await ticket_channel.send(f"📝 **Descreva sua solicitação abaixo:**")
-        
-        await interaction.followup.send(f"✅ Ticket criado! {ticket_channel.mention}", ephemeral=True)
+        try:
+            # Encontrar o canal base
+            canal_base = interaction.guild.get_channel(CANAL_TICKET_ID)
+            if not canal_base:
+                await interaction.followup.send("❌ Canal de tickets não encontrado! Contate um administrador.", ephemeral=True)
+                return
+            
+            categoria_parent = canal_base.category
+            
+            # Verificar se já tem ticket aberto
+            if categoria_parent:
+                for channel in categoria_parent.channels:
+                    if isinstance(channel, discord.TextChannel):
+                        if channel.topic and str(interaction.user.id) in channel.topic:
+                            await interaction.followup.send(f"❌ Você já tem um ticket aberto: {channel.mention}", ephemeral=True)
+                            return
+            
+            # Configurar permissões
+            overwrites = {
+                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
+                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, read_message_history=True),
+                interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            }
+            
+            # Adicionar staff roles
+            for role_name in load_adm_roles():
+                role = discord.utils.get(interaction.guild.roles, name=role_name)
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            
+            # Adicionar cargo Owner
+            for role in interaction.guild.roles:
+                if "owner" in role.name.lower():
+                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            
+            # Criar canal do ticket
+            nome_canal = f"🎫-{interaction.user.name[:20]}-{categoria[:3]}"
+            ticket_channel = await interaction.guild.create_text_channel(
+                name=nome_canal,
+                category=categoria_parent,
+                overwrites=overwrites,
+                topic=f"{categoria} | {interaction.user.id}",
+                reason=f"Ticket criado por {interaction.user.name}"
+            )
+            
+            # Enviar painel fixo dentro do ticket
+            painel_view = TicketPainelView(interaction.user.id, ticket_channel, nome_categoria)
+            embed = painel_view.criar_embed()
+            
+            await ticket_channel.send(f"🎫 **Ticket aberto por:** {interaction.user.mention}", embed=embed, view=painel_view)
+            await ticket_channel.send(f"📝 **Descreva sua solicitação abaixo:**")
+            
+            await interaction.followup.send(f"✅ Ticket criado! {ticket_channel.mention}", ephemeral=True)
+            
+        except discord.Forbidden:
+            await interaction.followup.send("❌ **Erro de permissão!** Não tenho permissão para criar canais.", ephemeral=True)
+        except Exception as e:
+            print(f"[ERRO TICKET] {type(e).__name__}: {e}")
+            await interaction.followup.send(f"❌ **Erro ao criar ticket:** {str(e)[:100]}", ephemeral=True)
 
-# ========== VIEW PRINCIPAL (SÓ O SELECT MENU, SEM BOTÃO) ==========
+# ========== VIEW PRINCIPAL (APENAS O SELECT MENU) ==========
 class TicketAbrirView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        # Adiciona apenas o Select Menu, sem botão adicional
         self.add_item(CategoriaSelect())
 
 # ========== COG PRINCIPAL ==========
@@ -532,5 +552,8 @@ class TicketsCog(commands.Cog):
 # ========== SETUP ==========
 async def setup(bot):
     await bot.add_cog(TicketsCog(bot))
+    # Registrar views persistentes
     bot.add_view(TicketAbrirView())
+    bot.add_view(TicketPainelView(0, None, ""))  # View dummy para registro
+    bot.add_view(TicketReabrirView(None, 0, ""))  # View dummy para registro
     print("✅ Sistema de Tickets configurado!")
