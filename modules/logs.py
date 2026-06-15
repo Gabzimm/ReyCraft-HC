@@ -1,33 +1,36 @@
 import discord
 from discord.ext import commands
+from discord import ui
 from datetime import datetime
-import json
+import sys
 import os
 
-# ========== CONFIGURAÇÃO ==========
-LOG_FILE = "command_logs.json"
+# Adicionar caminho para importar utils
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Importar sistema de memória
+from utils.memory import load_all_data, save_all_data
+
+# ========== FUNÇÕES DE LOG (USANDO MEMÓRIA CENTRAL) ==========
 def carregar_logs():
-    """Carrega os logs salvos"""
-    if os.path.exists(LOG_FILE):
-        try:
-            with open(LOG_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return []
-    return []
+    """Carrega os logs salvos da memória central"""
+    dados = load_all_data()
+    return dados.get("logs_comandos", [])
 
 def salvar_log(log):
-    """Salva um novo log"""
-    logs = carregar_logs()
-    logs.append(log)
+    """Salva um novo log na memória central"""
+    dados = load_all_data()
+    
+    if "logs_comandos" not in dados:
+        dados["logs_comandos"] = []
+    
+    dados["logs_comandos"].append(log)
     
     # Manter apenas os últimos 1000 logs
-    if len(logs) > 1000:
-        logs = logs[-1000:]
+    if len(dados["logs_comandos"]) > 1000:
+        dados["logs_comandos"] = dados["logs_comandos"][-1000:]
     
-    with open(LOG_FILE, "w") as f:
-        json.dump(logs, f, indent=4)
+    save_all_data(dados)
 
 def is_owner(member: discord.Member) -> bool:
     """Verifica se o membro tem cargo Owner"""
@@ -38,7 +41,7 @@ def is_owner(member: discord.Member) -> bool:
     if member.id == member.guild.owner_id:
         return True
     
-    # Cargo com "Owner" no nome
+    # Cargo com "Owner" ou "𝐎𝐰𝐧𝐞𝐫" no nome
     for role in member.roles:
         if "owner" in role.name.lower():
             return True
@@ -56,7 +59,7 @@ class LogsCog(commands.Cog):
         """Registra quando um comando é executado com sucesso"""
         
         # Ignorar comandos de log (para não gerar loop)
-        if ctx.command.name in ["logs", "limpar_logs"]:
+        if ctx.command.name in ["logs", "limpar_logs", "log_detalhe", "stats_comandos"]:
             return
         
         # Criar registro do comando
@@ -76,25 +79,22 @@ class LogsCog(commands.Cog):
                 "nome": ctx.guild.name,
                 "id": ctx.guild.id
             },
-            "argumentos": ctx.args[2:] if len(ctx.args) > 2 else [],
+            "argumentos": str(ctx.args[2:]) if len(ctx.args) > 2 else "",
             "data": datetime.now().isoformat(),
-            "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            "status": "SUCESSO"
         }
         
         # Se for comando de limpeza, registrar quantidade
-        if ctx.command.name in ["limpar", "clean", "clear"] and ctx.args:
-            if len(ctx.args) > 2:
-                log_entry["quantidade"] = ctx.args[2]
+        if ctx.command.name in ["limpar", "clean", "clear"] and len(ctx.args) > 2:
+            log_entry["quantidade"] = ctx.args[2]
         
         # Salvar log
         salvar_log(log_entry)
-        
-        # Tentar enviar log em tempo real para um canal específico (opcional)
-        await self.enviar_log_embed(ctx, log_entry)
     
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        """Registra erros de comando também"""
+        """Registra erros de comando"""
         
         log_entry = {
             "comando": ctx.command.name if ctx.command else "desconhecido",
@@ -107,6 +107,10 @@ class LogsCog(commands.Cog):
                 "nome": ctx.channel.name,
                 "id": ctx.channel.id
             },
+            "servidor": {
+                "nome": ctx.guild.name if ctx.guild else "DM",
+                "id": ctx.guild.id if ctx.guild else 0
+            },
             "erro": str(error),
             "data": datetime.now().isoformat(),
             "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
@@ -114,11 +118,6 @@ class LogsCog(commands.Cog):
         }
         
         salvar_log(log_entry)
-    
-    async def enviar_log_embed(self, ctx, log_entry):
-        """Envia um embed de log em tempo real (opcional)"""
-        # Você pode criar um canal específico para logs ao vivo
-        # Por enquanto, só salva no arquivo
     
     @commands.command(name="logs")
     async def ver_logs(self, ctx, quantidade: int = 10):
@@ -133,7 +132,7 @@ class LogsCog(commands.Cog):
         
         # Verificar se é Owner
         if not is_owner(ctx.author):
-            await ctx.send("❌ **Apenas membros com cargo 𝐎𝐰𝐧𝐞𝐫 podem ver os logs!**")
+            await ctx.send("❌ **Apenas membros com cargo Owner podem ver os logs!**")
             return
         
         # Limitar quantidade
@@ -151,7 +150,7 @@ class LogsCog(commands.Cog):
         
         # Pegar os últimos logs
         logs_recentes = logs[-quantidade:]
-        logs_recentes.reverse()  # Mostrar mais recentes primeiro
+        logs_recentes.reverse()
         
         # Criar embed
         embed = discord.Embed(
@@ -160,16 +159,13 @@ class LogsCog(commands.Cog):
             color=discord.Color.blue()
         )
         
-        for log in logs_recentes[:25]:  # Máximo 25 por embed
+        for log in logs_recentes[:25]:
             comando = log.get("comando", "?")
             usuario = log.get("usuario", {}).get("nome", "?")
             timestamp = log.get("timestamp", "?")
-            status = log.get("status", "✅")
+            status = log.get("status", "SUCESSO")
             
-            if status == "ERRO":
-                status_emoji = "❌"
-            else:
-                status_emoji = "✅"
+            status_emoji = "❌" if status == "ERRO" else "✅"
             
             embed.add_field(
                 name=f"{status_emoji} {timestamp}",
@@ -193,7 +189,7 @@ class LogsCog(commands.Cog):
         """
         
         if not is_owner(ctx.author):
-            await ctx.send("❌ **Apenas membros com cargo 𝐎𝐰𝐧𝐞𝐫 podem ver os logs!**")
+            await ctx.send("❌ **Apenas membros com cargo Owner podem ver os logs!**")
             return
         
         logs = carregar_logs()
@@ -219,6 +215,7 @@ class LogsCog(commands.Cog):
         embed.add_field(name="🆔 ID", value=f"`{log.get('usuario', {}).get('id', '?')}`", inline=True)
         embed.add_field(name="📅 Data/Hora", value=log.get('timestamp', '?'), inline=True)
         embed.add_field(name="💬 Canal", value=f"#{log.get('canal', {}).get('nome', '?')}", inline=True)
+        embed.add_field(name="🌐 Servidor", value=log.get('servidor', {}).get('nome', '?'), inline=True)
         
         if log.get('quantidade'):
             embed.add_field(name="🧹 Quantidade", value=f"{log.get('quantidade')} mensagens", inline=True)
@@ -227,7 +224,7 @@ class LogsCog(commands.Cog):
             embed.add_field(name="📝 Argumentos", value=f"`{log.get('argumentos')}`", inline=False)
         
         if log.get('erro'):
-            embed.add_field(name="❌ Erro", value=f"```{log.get('erro')}```", inline=False)
+            embed.add_field(name="❌ Erro", value=f"```{log.get('erro')[:500]}```", inline=False)
         
         embed.set_footer(text=f"Total de logs: {len(logs)}")
         
@@ -242,10 +239,10 @@ class LogsCog(commands.Cog):
         """
         
         if not is_owner(ctx.author):
-            await ctx.send("❌ **Apenas membros com cargo 𝐎𝐰𝐧𝐞𝐫 podem limpar os logs!**")
+            await ctx.send("❌ **Apenas membros com cargo Owner podem limpar os logs!**")
             return
         
-        # Confirmar
+        # View de confirmação
         embed = discord.Embed(
             title="⚠️ CONFIRMAR LIMPEZA DE LOGS",
             description="Tem certeza que deseja apagar TODOS os logs? Esta ação é irreversível!",
@@ -254,32 +251,37 @@ class LogsCog(commands.Cog):
         
         view = ui.View(timeout=30)
         
-        async def confirmar(interaction):
+        btn_confirmar = ui.Button(label="✅ Sim, apagar tudo", style=discord.ButtonStyle.danger, custom_id="confirmar_limpar")
+        btn_cancelar = ui.Button(label="❌ Cancelar", style=discord.ButtonStyle.secondary, custom_id="cancelar_limpar")
+        
+        async def confirmar_callback(interaction: discord.Interaction):
             if interaction.user != ctx.author:
                 await interaction.response.send_message("❌ Apenas quem executou pode confirmar!", ephemeral=True)
                 return
             
-            # Limpar arquivo
-            with open(LOG_FILE, "w") as f:
-                json.dump([], f)
+            # Limpar logs na memória
+            dados = load_all_data()
+            dados["logs_comandos"] = []
+            save_all_data(dados)
             
-            await interaction.response.edit_message(content="✅ Todos os logs foram apagados!", embed=None, view=None)
+            for item in view.children:
+                item.disabled = True
+            await interaction.response.edit_message(content="✅ Todos os logs foram apagados!", embed=None, view=view)
         
-        async def cancelar(interaction):
+        async def cancelar_callback(interaction: discord.Interaction):
             if interaction.user != ctx.author:
                 await interaction.response.send_message("❌ Apenas quem executou pode cancelar!", ephemeral=True)
                 return
-            await interaction.response.edit_message(content="❌ Operação cancelada.", embed=None, view=None)
+            
+            for item in view.children:
+                item.disabled = True
+            await interaction.response.edit_message(content="❌ Operação cancelada.", embed=None, view=view)
         
-        view.add_item(ui.Button(label="✅ Sim, apagar tudo", style=discord.ButtonStyle.danger, custom_id="confirmar"))
-        view.add_item(ui.Button(label="❌ Cancelar", style=discord.ButtonStyle.secondary, custom_id="cancelar"))
+        btn_confirmar.callback = confirmar_callback
+        btn_cancelar.callback = cancelar_callback
         
-        # Atribuir callbacks
-        for item in view.children:
-            if item.custom_id == "confirmar":
-                item.callback = confirmar
-            elif item.custom_id == "cancelar":
-                item.callback = cancelar
+        view.add_item(btn_confirmar)
+        view.add_item(btn_cancelar)
         
         await ctx.send(embed=embed, view=view)
     
@@ -292,7 +294,7 @@ class LogsCog(commands.Cog):
         """
         
         if not is_owner(ctx.author):
-            await ctx.send("❌ **Apenas membros com cargo 𝐎𝐰𝐧𝐞𝐫 podem ver as estatísticas!**")
+            await ctx.send("❌ **Apenas membros com cargo Owner podem ver as estatísticas!**")
             return
         
         logs = carregar_logs()
