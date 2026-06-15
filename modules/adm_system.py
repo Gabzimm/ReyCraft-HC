@@ -4,11 +4,30 @@ from discord import ui, ButtonStyle
 import json
 import os
 import asyncio
+import sys
+
+# Adicionar caminho para importar utils
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Importar sistema de memória (opcional - se quiser usar)
+try:
+    from utils.memory import load_guild_data, save_guild_data
+    USING_MEMORY = True
+except:
+    USING_MEMORY = False
 
 # ========== ARQUIVO DE CONFIGURAÇÃO ==========
 DATA_FILE = "adm_roles.json"
 
-def load_adm_roles():
+def load_adm_roles(guild_id=None):
+    """Carrega lista de cargos ADM"""
+    # Tentar carregar da memória primeiro
+    if USING_MEMORY and guild_id:
+        dados = load_guild_data(guild_id, "adm_roles", None)
+        if dados is not None:
+            return dados
+    
+    # Fallback para arquivo local
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r") as f:
@@ -17,7 +36,13 @@ def load_adm_roles():
             return []
     return []
 
-def save_adm_roles(roles):
+def save_adm_roles(roles, guild_id=None):
+    """Salva lista de cargos ADM"""
+    # Salvar na memória
+    if USING_MEMORY and guild_id:
+        save_guild_data(guild_id, "adm_roles", roles)
+    
+    # Também salvar no arquivo local como backup
     try:
         with open(DATA_FILE, "w") as f:
             json.dump(roles, f, indent=4)
@@ -60,7 +85,7 @@ def is_staff(member: discord.Member) -> bool:
         return True
     
     # Cargos ADM configurados
-    adm_roles = load_adm_roles()
+    adm_roles = load_adm_roles(member.guild.id)
     for role in member.roles:
         if role.name in adm_roles:
             return True
@@ -112,21 +137,21 @@ class EscolherCargoModal(ui.Modal, title="➕ Adicionar Cargo ADM"):
             await interaction.followup.send(f"❌ Cargo `{nome}` não encontrado!", ephemeral=True)
             return
         
-        adm_roles = load_adm_roles()
+        adm_roles = load_adm_roles(interaction.guild.id)
         
         if self.modo == "add":
             if cargo.name in adm_roles:
                 await interaction.followup.send(f"❌ Cargo `{cargo.name}` já é um ADM!", ephemeral=True)
                 return
             adm_roles.append(cargo.name)
-            save_adm_roles(adm_roles)
+            save_adm_roles(adm_roles, interaction.guild.id)
             await interaction.followup.send(f"✅ Cargo `{cargo.name}` adicionado como ADM!", ephemeral=True)
         else:
             if cargo.name not in adm_roles:
                 await interaction.followup.send(f"❌ Cargo `{cargo.name}` não está na lista!", ephemeral=True)
                 return
             adm_roles.remove(cargo.name)
-            save_adm_roles(adm_roles)
+            save_adm_roles(adm_roles, interaction.guild.id)
             await interaction.followup.send(f"✅ Cargo `{cargo.name}` removido da lista!", ephemeral=True)
 
 # ========== VIEW DE LISTA ==========
@@ -185,30 +210,36 @@ class ListaCargosView(ui.View):
             await interaction.followup.send(f"❌ Cargo não encontrado!", ephemeral=True)
             return
         
-        adm_roles = load_adm_roles()
+        adm_roles = load_adm_roles(interaction.guild.id)
         
         if self.modo == "add":
             if cargo.name in adm_roles:
                 await interaction.followup.send(f"❌ Cargo `{cargo.name}` já é um ADM!", ephemeral=True)
                 return
             adm_roles.append(cargo.name)
-            save_adm_roles(adm_roles)
+            save_adm_roles(adm_roles, interaction.guild.id)
             await interaction.followup.send(f"✅ Cargo `{cargo.name}` adicionado como ADM!", ephemeral=True)
         else:
             if cargo.name not in adm_roles:
                 await interaction.followup.send(f"❌ Cargo `{cargo.name}` não está na lista!", ephemeral=True)
                 return
             adm_roles.remove(cargo.name)
-            save_adm_roles(adm_roles)
+            save_adm_roles(adm_roles, interaction.guild.id)
             await interaction.followup.send(f"✅ Cargo `{cargo.name}` removido da lista!", ephemeral=True)
-        
-        await self.cog.atualizar_painel(interaction)
     
     async def previous_page(self, interaction: discord.Interaction):
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message("❌ Apenas quem executou pode usar!", ephemeral=True)
+            return
+        
         new_view = ListaCargosView(self.cog, self.ctx, self.modo, self.current_page - 1)
         await interaction.response.edit_message(view=new_view)
     
     async def next_page(self, interaction: discord.Interaction):
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message("❌ Apenas quem executou pode usar!", ephemeral=True)
+            return
+        
         new_view = ListaCargosView(self.cog, self.ctx, self.modo, self.current_page + 1)
         await interaction.response.edit_message(view=new_view)
 
@@ -253,7 +284,7 @@ class AdmPainelView(ui.View):
     
     @ui.button(label="➖ Remover ADM", style=ButtonStyle.danger, emoji="➖", row=0)
     async def remove_adm(self, interaction: discord.Interaction, button: ui.Button):
-        adm_roles = load_adm_roles()
+        adm_roles = load_adm_roles(interaction.guild.id)
         if not adm_roles:
             embed = discord.Embed(title="❌ Nenhum ADM Configurado", description="Não há cargos ADM configurados!", color=discord.Color.red())
             await interaction.response.edit_message(embed=embed, view=None)
@@ -285,7 +316,7 @@ class AdmPainelView(ui.View):
     
     @ui.button(label="📋 Lista de ADMs", style=ButtonStyle.secondary, emoji="📋", row=1)
     async def list_adms(self, interaction: discord.Interaction, button: ui.Button):
-        adm_roles = load_adm_roles()
+        adm_roles = load_adm_roles(interaction.guild.id)
         if not adm_roles:
             embed = discord.Embed(title="📋 Lista de ADMs", description="❌ Nenhum cargo ADM configurado!", color=discord.Color.red())
         else:
@@ -298,17 +329,6 @@ class AdmCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         print("✅ Módulo ADM System carregado!")
-    
-    async def atualizar_painel(self, interaction: discord.Interaction):
-        adm_roles = load_adm_roles()
-        embed = discord.Embed(
-            title="👑 **Sistema de Gerenciamento de Staff**",
-            description=f"Aqui você pode gerenciar quais cargos terão permissão de staff.\n\n**📋 Staffs atuais:**\n{', '.join(adm_roles) if adm_roles else 'Nenhum cargo configurado'}",
-            color=discord.Color.purple()
-        )
-        embed.set_footer(text="⚠️ Apenas Dono ou 𝐎𝐰𝐧𝐞𝐫 podem alterar essas configurações")
-        view = AdmPainelView(self, await self.bot.get_context(interaction.message))
-        await interaction.edit_original_response(embed=embed, view=view)
     
     @commands.command(name="adm")
     async def adm_painel(self, ctx):
@@ -327,7 +347,7 @@ class AdmCog(commands.Cog):
         except:
             pass
         
-        adm_roles = load_adm_roles()
+        adm_roles = load_adm_roles(ctx.guild.id)
         embed = discord.Embed(
             title="👑 **Sistema de Gerenciamento de Staff**",
             description=f"Aqui você pode gerenciar quais cargos terão permissão de staff.\n\n**📋 Staffs atuais:**\n{', '.join(adm_roles) if adm_roles else 'Nenhum cargo configurado'}",
