@@ -12,7 +12,7 @@ from modules.adm_system import is_staff, load_adm_roles
 CANAL_TICKET_ID = 1332371959308095560  # ID do canal onde o painel será postado
 
 # URL da imagem que aparece no painel inicial
-IMAGEM_PAINEL_URL = "https://cdn.discordapp.com/attachments/1386344818833363006/1515474727915749416/banner.png?ex=6a311d93&is=6a2fcc13&hm=3a99b68ec3d9671fc8b1d046efed577f488d1d92510aa9751cfd578e3d6a10e2&"
+IMAGEM_PAINEL_URL = "https://cdn.discordapp.com/attachments/1386344818833363006/1516181735002472478/banner_tickets.png?ex=6a31b5c6&is=6a306446&hm=a19499c7ec159f5cb84cdc1fbe34c1de4befbaf26e759bb62815bb8d6721b5a5"
 
 # Controle de staff assumindo tickets
 staff_tickets = {}  # {staff_id: channel_id}
