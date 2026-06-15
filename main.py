@@ -200,32 +200,28 @@ async def help_command(ctx):
               "`!status` - Status do bot\n"
               "`!info` - Informações do servidor",
         inline=False
-
     )
     
     embed.add_field(
         name="🎫 Sistema de Tickets",
         value="`!setup_tickets` - Configurar painel de tickets (ADMIN)",
         inline=False
-
     )
-
+    
     embed.add_field(
         name="🧹 Sistema de Limpeza",
-        value="`!limpar` - painel de limpeza (ADMIN)",
-              "`!limpar` 10 - limpar 10 mensagens (ADMIN)",
-              "`!limpar` 50 - limpar 50 mensagens (ADMIN)",
-              "`!limpar` 100 - limpar 100 mensagens (ADMIN)",
-              "`!limpar` 999 - limpar 999 mensagens (ADMIN)",
+        value="`!limpar` - Abre o painel de limpeza (STAFF)\n"
+              "`!limpar 10` - Limpar 10 mensagens (STAFF)\n"
+              "`!limpar 50` - Limpar 50 mensagens (STAFF)\n"
+              "`!limpar 100` - Limpar 100 mensagens (STAFF)\n"
+              "`!limpar 999` - Limpar 999 mensagens (STAFF)",
         inline=False
-
     )
-
+    
     embed.add_field(
-        name="👑 Sistema de adcionar ADMs",
-        value="`!adm` - painel de Adcionar ADMs (Somente os OWNER consegue add)",
+        name="👑 Sistema de ADM",
+        value="`!adm` - Painel para adicionar ADMs (Apenas o DONO)",
         inline=False
-
     )
     
     embed.set_footer(text="Reycraft HC • Use os comandos com responsabilidade")
