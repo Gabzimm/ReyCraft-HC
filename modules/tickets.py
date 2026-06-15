@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import ui, ButtonStyle
 import asyncio
 from datetime import datetime
+from utils.memory import load_guild_data, is_staff
 
 # Importar sistema ADM
 try:
