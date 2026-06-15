@@ -309,13 +309,12 @@ class TicketPainelView(ui.View):
             await msg.delete()
             return
         
-        # Cooldown de 6 minutos
         canal_id = self.ticket_channel.id
         agora = datetime.now().timestamp()
         
         if canal_id in ultimo_chamado:
             tempo_passado = agora - ultimo_chamado[canal_id]
-            if tempo_passado < 360:  # 6 minutos = 360 segundos
+            if tempo_passado < 360:
                 restante = int(360 - tempo_passado)
                 minutos = restante // 60
                 segundos = restante % 60
@@ -331,7 +330,6 @@ class TicketPainelView(ui.View):
         
         await interaction.response.defer()
         
-        # Enviar no chat do ticket
         embed_chamada = discord.Embed(
             title="📞 CHAMANDO RESPONSÁVEL",
             description=(
@@ -343,7 +341,6 @@ class TicketPainelView(ui.View):
         
         await self.ticket_channel.send(embed=embed_chamada)
         
-        # Tentar enviar DM para o staff
         try:
             embed_dm = discord.Embed(
                 title="⚠️ ATENDIMENTO PENDENTE",
@@ -362,7 +359,7 @@ class TicketPainelView(ui.View):
     
     def criar_embed(self):
         embeds = {
-            "denuncia_jogador": discord.Embed(
+            "🚨 Denúncia de Jogador": discord.Embed(
                 title="🚨 DENÚNCIA DE JOGADOR",
                 description=(
                     "Obrigado por abrir este ticket.\n\n"
@@ -375,7 +372,7 @@ class TicketPainelView(ui.View):
                 ),
                 color=discord.Color.red()
             ),
-            "vip": discord.Embed(
+            "💎 Adquirir VIP": discord.Embed(
                 title="💎 ADQUIRIR VIP",
                 description=(
                     "Obrigado pelo seu interesse em apoiar o servidor.\n\n"
@@ -386,7 +383,7 @@ class TicketPainelView(ui.View):
                 ),
                 color=discord.Color.gold()
             ),
-            "denuncia_staff": discord.Embed(
+            "⛔ Denúncia Staff": discord.Embed(
                 title="⛔ DENÚNCIA CONTRA STAFF",
                 description=(
                     "Obrigado por abrir este ticket.\n\n"
@@ -398,7 +395,7 @@ class TicketPainelView(ui.View):
                 ),
                 color=discord.Color.dark_red()
             ),
-            "outros": discord.Embed(
+            "📋 Outro Assunto": discord.Embed(
                 title="📋 OUTROS ASSUNTOS",
                 description=(
                     "Obrigado por abrir este ticket.\n\n"
@@ -412,30 +409,32 @@ class TicketPainelView(ui.View):
                 color=discord.Color.blue()
             )
         }
-        return embeds.get(self.categoria, embeds["outros"])
+        return embeds.get(self.categoria, embeds["📋 Outro Assunto"])
 
-# ========== SELECIONAR CATEGORIA ==========
-class SelecionarCategoriaView(ui.View):
+# ========== SELECT MENU PARA ESCOLHER CATEGORIA ==========
+class CategoriaSelect(ui.Select):
     def __init__(self):
-        super().__init__(timeout=60)
+        options = [
+            discord.SelectOption(label="🚨 Denúncia de Jogador", value="denuncia_jogador", emoji="🚨", description="Denuncie um jogador que está quebrando as regras"),
+            discord.SelectOption(label="💎 Adquirir VIP", value="vip", emoji="💎", description="Informações sobre VIP e doações"),
+            discord.SelectOption(label="⛔ Denúncia Staff", value="denuncia_staff", emoji="⛔", description="Denuncie um membro da equipe"),
+            discord.SelectOption(label="📋 Outro Assunto", value="outros", emoji="📋", description="Outros assuntos não listados acima"),
+        ]
+        super().__init__(placeholder="🔽 Selecione o tipo de atendimento...", options=options, min_values=1, max_values=1)
     
-    @ui.button(label="🚨 Denúncia de Jogador", style=ButtonStyle.danger, emoji="🚨", row=0)
-    async def denuncia_jogador(self, interaction: discord.Interaction, button: ui.Button):
-        await self.criar_ticket(interaction, "denuncia_jogador")
+    async def callback(self, interaction: discord.Interaction):
+        categoria = self.values[0]
+        
+        nome_categoria = {
+            "denuncia_jogador": "🚨 Denúncia de Jogador",
+            "vip": "💎 Adquirir VIP", 
+            "denuncia_staff": "⛔ Denúncia Staff",
+            "outros": "📋 Outro Assunto"
+        }.get(categoria, "📋 Outro Assunto")
+        
+        await self.criar_ticket(interaction, categoria, nome_categoria)
     
-    @ui.button(label="💎 Adquirir VIP", style=ButtonStyle.success, emoji="💎", row=0)
-    async def vip(self, interaction: discord.Interaction, button: ui.Button):
-        await self.criar_ticket(interaction, "vip")
-    
-    @ui.button(label="⛔ Denúncia Staff", style=ButtonStyle.danger, emoji="⛔", row=1)
-    async def denuncia_staff(self, interaction: discord.Interaction, button: ui.Button):
-        await self.criar_ticket(interaction, "denuncia_staff")
-    
-    @ui.button(label="📋 Outro", style=ButtonStyle.secondary, emoji="📋", row=1)
-    async def outros(self, interaction: discord.Interaction, button: ui.Button):
-        await self.criar_ticket(interaction, "outros")
-    
-    async def criar_ticket(self, interaction: discord.Interaction, categoria):
+    async def criar_ticket(self, interaction: discord.Interaction, categoria, nome_categoria):
         await interaction.response.defer(ephemeral=True)
         
         categoria_parent = interaction.channel.category
@@ -465,7 +464,7 @@ class SelecionarCategoriaView(ui.View):
             reason=f"Ticket criado por {interaction.user.name}"
         )
         
-        painel_view = TicketPainelView(interaction.user.id, ticket_channel, categoria)
+        painel_view = TicketPainelView(interaction.user.id, ticket_channel, nome_categoria)
         embed = painel_view.criar_embed()
         
         await ticket_channel.send(f"🎫 **Ticket aberto por:** {interaction.user.mention}", embed=embed, view=painel_view)
@@ -473,29 +472,16 @@ class SelecionarCategoriaView(ui.View):
         
         await interaction.followup.send(f"✅ Ticket criado! {ticket_channel.mention}", ephemeral=True)
 
-# ========== VIEW PRINCIPAL DO PAINEL ==========
+# ========== VIEW PRINCIPAL COM SELECT MENU ==========
 class TicketAbrirView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        self.add_item(CategoriaSelect())
     
-    @ui.button(label="🎫 Abrir Ticket", style=ButtonStyle.primary, emoji="🎫", custom_id="abrir_ticket")
+    @ui.button(label="🎫 Abrir Ticket", style=ButtonStyle.primary, emoji="🎫", custom_id="abrir_ticket", row=1)
     async def abrir_ticket(self, interaction: discord.Interaction, button: ui.Button):
-        embed = discord.Embed(
-            title="🎫 CENTRAL DE ATENDIMENTO",
-            description=(
-                "**Precisa de ajuda? Clique no botão abaixo para abrir um ticket e escolha a opção que atenda seu atendimento**\n\n"
-                "Este sistema foi criado para oferecer um atendimento organizado e eficiente, sendo destinado a dúvidas, "
-                "problemas relacionados ao servidor, denúncias, questões sobre cargos e outros assuntos importantes.\n\n"
-                "Ao abrir um ticket, explique sua situação de forma clara e detalhada para que possamos ajudá-lo da melhor maneira possível. "
-                "Quanto mais informações forem fornecidas, mais rápido será o atendimento.\n\n"
-                "-# ⚠️ **Importante:** Utilize este sistema apenas quando houver uma necessidade real. "
-                "A abertura de tickets sem motivo, brincadeiras, spam ou qualquer tipo de desrespeito poderá resultar em punições ou até mesmo banimento."
-            ),
-            color=discord.Color.purple()
-        )
-        
-        view = SelecionarCategoriaView()
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        # Apenas mostrar o select menu que já está na view
+        pass
 
 # ========== COG PRINCIPAL ==========
 class TicketsCog(commands.Cog):
@@ -509,14 +495,15 @@ class TicketsCog(commands.Cog):
         """Configura o painel de tickets"""
         
         embed = discord.Embed(
-            title="🎫 **SISTEMA DE TICKETS**",
+            title="🎫 CENTRAL DE ATENDIMENTO",
             description=(
-                "**Clique no botão abaixo para abrir um ticket**\n\n"
-                "Precisa de ajuda? Utilize nosso sistema de tickets!\n\n"
-                "• Denúncias de jogadores\n"
-                "• Adquirir VIP\n"
-                "• Denúncias contra staff\n"
-                "• Outros assuntos"
+                "**Precisa de ajuda? Clique no botão abaixo para abrir um ticket e escolha a opção que atenda seu atendimento**\n\n"
+                "Este sistema foi criado para oferecer um atendimento organizado e eficiente, sendo destinado a dúvidas, "
+                "problemas relacionados ao servidor, denúncias, questões sobre cargos e outros assuntos importantes.\n\n"
+                "Ao abrir um ticket, explique sua situação de forma clara e detalhada para que possamos ajudá-lo da melhor maneira possível. "
+                "Quanto mais informações forem fornecidas, mais rápido será o atendimento.\n\n"
+                "⚠️ **Importante:** Utilize este sistema apenas quando houver uma necessidade real. "
+                "A abertura de tickets sem motivo, brincadeiras, spam ou qualquer tipo de desrespeito poderá resultar em punições ou até mesmo banimento."
             ),
             color=discord.Color.purple()
         )
