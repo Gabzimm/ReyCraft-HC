@@ -13,8 +13,8 @@ except ImportError:
     from adm_system import is_staff
 
 # ========== CONFIGURAÇÕES ==========
-TICKET_CATEGORY_ID = None
-TRANSCRIPT_CHANNEL_ID = None
+# ID do canal onde o select menu será postado
+CANAL_TICKET_ID = 1332371959308095560  # ← SEU ID DO CANAL
 
 # Controle de staff assumindo tickets
 staff_tickets = {}
@@ -225,7 +225,7 @@ class ConfirmarDelecaoView(ui.View):
         await interaction.response.defer()
         await interaction.message.delete()
 
-# ========== PAINEL FIXO DO TICKET ==========
+# ========== PAINEL FIXO DO TICKET (BOTÕES DENTRO DO TICKET) ==========
 class TicketPainelView(ui.View):
     def __init__(self, ticket_owner_id, ticket_channel, categoria):
         super().__init__(timeout=None)
@@ -411,7 +411,7 @@ class TicketPainelView(ui.View):
         }
         return embeds.get(self.categoria, embeds["📋 Outro Assunto"])
 
-# ========== SELECT MENU PARA ESCOLHER CATEGORIA ==========
+# ========== SELECT MENU PARA ESCOLHER CATEGORIA (DIRETO, SEM BOTÃO) ==========
 class CategoriaSelect(ui.Select):
     def __init__(self):
         options = [
@@ -437,33 +437,51 @@ class CategoriaSelect(ui.Select):
     async def criar_ticket(self, interaction: discord.Interaction, categoria, nome_categoria):
         await interaction.response.defer(ephemeral=True)
         
-        categoria_parent = interaction.channel.category
-        for channel in categoria_parent.channels:
-            if channel.topic and str(interaction.user.id) in channel.topic:
-                await interaction.followup.send(f"❌ Você já tem um ticket aberto: {channel.mention}", ephemeral=True)
-                return
+        # Encontrar a categoria do canal especificado
+        canal_base = interaction.guild.get_channel(CANAL_TICKET_ID)
+        if not canal_base:
+            await interaction.followup.send("❌ Canal de tickets não encontrado! Contate um administrador.", ephemeral=True)
+            return
         
+        categoria_parent = canal_base.category
+        
+        # Verificar se já tem ticket aberto
+        for channel in categoria_parent.channels:
+            if isinstance(channel, discord.TextChannel):
+                if channel.topic and str(interaction.user.id) in channel.topic:
+                    await interaction.followup.send(f"❌ Você já tem um ticket aberto: {channel.mention}", ephemeral=True)
+                    return
+        
+        # Configurar permissões
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, read_message_history=True),
             interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
         }
         
+        # Adicionar staff roles
         from modules.adm_system import load_adm_roles
         for role_name in load_adm_roles():
             role = discord.utils.get(interaction.guild.roles, name=role_name)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
         
+        # Adicionar cargo Owner (qualquer cargo com Owner no nome)
+        for role in interaction.guild.roles:
+            if "owner" in role.name.lower():
+                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
+        # Criar canal do ticket
         nome_canal = f"🎫-{interaction.user.name[:20]}-{categoria[:3]}"
         ticket_channel = await interaction.guild.create_text_channel(
             name=nome_canal,
-            category=interaction.channel.category,
+            category=categoria_parent,
             overwrites=overwrites,
             topic=f"{categoria} | {interaction.user.id}",
             reason=f"Ticket criado por {interaction.user.name}"
         )
         
+        # Enviar painel fixo dentro do ticket
         painel_view = TicketPainelView(interaction.user.id, ticket_channel, nome_categoria)
         embed = painel_view.criar_embed()
         
@@ -472,16 +490,12 @@ class CategoriaSelect(ui.Select):
         
         await interaction.followup.send(f"✅ Ticket criado! {ticket_channel.mention}", ephemeral=True)
 
-# ========== VIEW PRINCIPAL COM SELECT MENU ==========
+# ========== VIEW PRINCIPAL (SÓ O SELECT MENU, SEM BOTÃO) ==========
 class TicketAbrirView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        # Adiciona apenas o Select Menu, sem botão adicional
         self.add_item(CategoriaSelect())
-    
-    @ui.button(label="🎫 Abrir Ticket", style=ButtonStyle.primary, emoji="🎫", custom_id="abrir_ticket", row=1)
-    async def abrir_ticket(self, interaction: discord.Interaction, button: ui.Button):
-        # Apenas mostrar o select menu que já está na view
-        pass
 
 # ========== COG PRINCIPAL ==========
 class TicketsCog(commands.Cog):
@@ -497,7 +511,7 @@ class TicketsCog(commands.Cog):
         embed = discord.Embed(
             title="🎫 CENTRAL DE ATENDIMENTO",
             description=(
-                "**Precisa de ajuda? Clique no botão abaixo para abrir um ticket e escolha a opção que atenda seu atendimento**\n\n"
+                "**Precisa de ajuda? Selecione uma opção abaixo para abrir um ticket**\n\n"
                 "Este sistema foi criado para oferecer um atendimento organizado e eficiente, sendo destinado a dúvidas, "
                 "problemas relacionados ao servidor, denúncias, questões sobre cargos e outros assuntos importantes.\n\n"
                 "Ao abrir um ticket, explique sua situação de forma clara e detalhada para que possamos ajudá-lo da melhor maneira possível. "
