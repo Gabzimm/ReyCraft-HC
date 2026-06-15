@@ -233,7 +233,6 @@ class ConfirmarDelecaoView(ui.View):
         
         # Avisar owner
         try:
-            # Extrair ID do owner do tópico
             if self.ticket_channel.topic:
                 for word in self.ticket_channel.topic.split():
                     if word.isdigit() and len(word) >= 17:
@@ -365,11 +364,12 @@ class TicketPainelView(ui.View):
         embed = self.criar_embed()
         embed.description += f"\n\n**👑 Responsável:** {interaction.user.mention}"
         
-        # Recriar botões com custom_id corretos
-        self.clear_items()
-        self.add_item(ui.Button(label="🔒 Fechar Ticket", style=ButtonStyle.gray, emoji="🔒", custom_id="ticket_fechar", row=0))
-        self.add_item(ui.Button(label="🗑️ Deletar Ticket", style=ButtonStyle.red, emoji="🗑️", custom_id="ticket_deletar", row=0))
-        self.add_item(ui.Button(label="📞 Chamar Responsável", style=ButtonStyle.blurple, emoji="📞", custom_id="ticket_chamar", row=1))
+        # Desabilitar apenas o botão "Assumir"
+        for child in self.children:
+            if child.custom_id == "ticket_assumir":
+                child.disabled = True
+                child.label = f"✅ Assumido por {interaction.user.display_name[:15]}"
+                child.style = ButtonStyle.secondary
         
         await interaction.message.edit(embed=embed, view=self)
         await interaction.followup.send(f"✅ {interaction.user.mention} assumiu o ticket!", ephemeral=True)
@@ -554,6 +554,4 @@ async def setup(bot):
     await bot.add_cog(TicketsCog(bot))
     # Registrar views persistentes
     bot.add_view(TicketAbrirView())
-    bot.add_view(TicketPainelView(0, None, ""))  # View dummy para registro
-    bot.add_view(TicketReabrirView(None, 0, ""))  # View dummy para registro
     print("✅ Sistema de Tickets configurado!")
