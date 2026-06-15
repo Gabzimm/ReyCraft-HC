@@ -108,10 +108,10 @@ async def alternar_status():
     # Lista com (status, tempo_em_segundos)
     statuses = [
         ("❤️ Bem-vindo ao ReyCraft HC ", 20),
-        ("ReyCraft HC melhor servidor ❤️", 20),   # 20 segundos
-        ("Melhor ping pro BR e PT 📶", 15),   # 15 segundos
-        ("🔥 Hardcore de Qualidade", 10),      # 10 segundos
-        ("Eventos exclusivos 💥", 15),  # 15 segundos
+        ("ReyCraft HC melhor servidor ❤️", 20),
+        ("Melhor ping pro BR e PT 📶", 15),
+        ("🔥 Hardcore de Qualidade", 10),
+        ("Eventos exclusivos 💥", 15),
     ]
     
     index = 0
@@ -120,7 +120,7 @@ async def alternar_status():
             status, tempo = statuses[index % len(statuses)]
             await bot.change_presence(activity=discord.Game(name=status))
             index += 1
-            await asyncio.sleep(tempo)  # Usa o tempo específico de cada status
+            await asyncio.sleep(tempo)
         except Exception as e:
             print(f"Erro ao mudar status: {e}")
             await asyncio.sleep(30)
@@ -139,8 +139,8 @@ async def on_member_join(member):
         else:
             print(f"⚠️ Cargo 👾 𝐉𝐨𝐠𝐚𝐝𝐨𝐫𝐞𝐬 não encontrado no servidor {member.guild.name}")
         
-        # 2. PEGAR O ID DO CANAL DE REGRAS (SUBSTITUA PELO SEU ID!)
-        canal_regras_id = 1357133841453678653  # ← COLOQUE O ID DO SEU CANAL AQUI!
+        # 2. PEGAR O ID DO CANAL DE REGRAS
+        canal_regras_id = 1357133841453678653
         canal_regras = member.guild.get_channel(canal_regras_id)
         
         if canal_regras:
@@ -149,11 +149,10 @@ async def on_member_join(member):
             canal_mention = "**canal de regras**"
             print(f"⚠️ Canal de regras não encontrado! ID: {canal_regras_id}")
         
-        # 3. ENVIAR MENSAGEM DE BOAS-VINDAS NO CANAL
+        # 3. ENVIAR MENSAGEM DE BOAS-VINDAS
         canal_entrada = discord.utils.get(member.guild.text_channels, name="🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨")
         
         if canal_entrada:
-            # Criar embed com a foto do usuário
             embed = discord.Embed(
                 description=(
                     f"## 👋 Bem-vindo(a), {member.mention}!\n"
@@ -165,23 +164,48 @@ async def on_member_join(member):
                 color=discord.Color.purple()
             )
             
-            # Adicionar thumbnail com a foto do usuário
             embed.set_thumbnail(url=member.display_avatar.url)
-            
-            # Adicionar imagem opcional
             embed.set_image(url="https://cdn.discordapp.com/attachments/1386344818833363006/1515474727915749416/banner.png?ex=6a2f2353&is=6a2dd1d3&hm=b36ad4b6ae2e03562536837f795a1f8758cca17c5e71cf0a82c8b774d84caf34&")
-            
             embed.set_footer(text=f"ID: {member.id} | Entrou em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
             
             await canal_entrada.send(embed=embed)
-            print(f"✅ Mensagem de boas-vindas enviada para {member.name} no canal {canal_entrada.name}")
+            print(f"✅ Mensagem de boas-vindas enviada para {member.name}")
         else:
-            print(f"⚠️ Canal 🥳・𝐁𝐞𝐦-𝐯𝐢𝐧𝐝𝐨 não encontrado no servidor {member.guild.name}")
+            print(f"⚠️ Canal de boas-vindas não encontrado")
             
     except discord.Forbidden:
         print(f"❌ Sem permissão para dar cargo em {member.guild.name}")
     except Exception as e:
         print(f"❌ Erro ao processar entrada de {member.name}: {e}")
+
+# ==================== EVENTO: MENSAGEM DE SAÍDA ====================
+@bot.event
+async def on_member_remove(member):
+    """Quando alguém sai do servidor, envia mensagem no canal de saída"""
+    try:
+        canal_saida = discord.utils.get(member.guild.text_channels, name="🥺・𝐀𝐝𝐞𝐮𝐬")
+        
+        if canal_saida:
+            embed = discord.Embed(
+                description=(
+                    f"## 👋 Adeus, {member.name}!\n"
+                    f"**{member.mention} saiu do servidor.**\n\n"
+                    f"**👤 Total de membros agora:** {member.guild.member_count}\n\n"
+                    f"> Esperamos te ver novamente em breve!"
+                ),
+                color=discord.Color.red()
+            )
+            
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.set_footer(text=f"ID: {member.id} | Saiu em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+            
+            await canal_saida.send(embed=embed)
+            print(f"✅ Mensagem de saída enviada para {member.name}")
+        else:
+            print(f"⚠️ Canal de saída não encontrado")
+            
+    except Exception as e:
+        print(f"❌ Erro ao processar saída de {member.name}: {e}")
 
 # ==================== COMANDO HELP ====================
 @bot.command(name="help")
@@ -220,7 +244,14 @@ async def help_command(ctx):
     
     embed.add_field(
         name="👑 Sistema de ADM",
-        value="`!adm` - Painel para adicionar ADMs (Apenas o DONO)",
+        value="`!adm` - Painel para adicionar ADMs (Apenas DONO ou 𝐎𝐰𝐧𝐞𝐫)",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📋 Sistema de Logs",
+        value="`!logs` - Ver logs de comandos (Apenas 𝐎𝐰𝐧𝐞𝐫)\n"
+              "`!stats_comandos` - Estatísticas de comandos (Apenas 𝐎𝐰𝐧𝐞𝐫)",
         inline=False
     )
     
@@ -300,9 +331,10 @@ async def on_guild_join(guild):
                 title="👋 Obrigado por me adicionar!",
                 description="Use **!help** para ver todos os comandos!\n\n"
                           "**Comandos importantes:**\n"
-                          "• `!adm` -  painel de adcionar ADMs\n"
-                          "• `!setup_tickets` - Configurar painel de ticket\n"
-                          "• `!limpar` -  painel de Limpeza",
+                          "• `!adm` - Painel de ADMs\n"
+                          "• `!setup_tickets` - Configurar tickets\n"
+                          "• `!limpar` - Limpeza de chat\n"
+                          "• `!logs` - Ver logs (𝐎𝐰𝐧𝐞𝐫)",
                 color=discord.Color.green()
             )
             await channel.send(embed=embed)
@@ -337,12 +369,12 @@ async def carregar_modulos():
             await bot.load_extension(modulo)
             print(f"   ✅ {modulo}")
         except Exception as e:
-            print(f"   ⚠️ {modulo}: {e}")
+            print(f"   ❌ {modulo}: {e}")
 
 # ==================== FUNÇÃO PRINCIPAL ====================
 async def main():
     print("\n" + "="*60)
-    print("🚀 INICIANDO BOT DISCORD - ISRAEL")
+    print("🚀 INICIANDO BOT DISCORD - REYCRAFT HC")
     print("="*60)
     
     TOKEN = os.getenv('DISCORD_TOKEN')
