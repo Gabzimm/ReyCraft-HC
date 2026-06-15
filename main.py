@@ -324,10 +324,12 @@ async def carregar_modulos():
     print("="*60)
     
     modulos = [
+        'modules.memory',
         'modules.adm_system',
         'modules.limpeza',
         'modules.tickets',
         'modules.antigolpe',
+        'modules.logs',
     ]
     
     for modulo in modulos:
