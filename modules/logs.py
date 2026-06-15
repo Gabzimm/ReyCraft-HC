@@ -43,7 +43,7 @@ def is_owner(member: discord.Member) -> bool:
     
     # Cargo com "Owner" ou "𝐎𝐰𝐧𝐞𝐫" no nome
     for role in member.roles:
-        if "owner" in role.name.lower():
+        if "𝐎𝐰𝐧𝐞𝐫" in role.name.lower():
             return True
     
     return False
