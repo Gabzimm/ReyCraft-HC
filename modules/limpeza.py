@@ -3,10 +3,12 @@ from discord.ext import commands
 from discord import ui, ButtonStyle
 import asyncio
 from datetime import datetime
-import re
 
 # Importar sistema ADM
-from adm_system import is_staff
+try:
+    from modules.adm_system import is_staff
+except ImportError:
+    from adm_system import is_staff
 
 # ========== FUNÇÕES AUXILIARES ==========
 def usuario_pode_limpar(member: discord.Member) -> bool:
@@ -24,12 +26,14 @@ class ConfirmarLimpezaView(ui.View):
         self.quantidade = quantidade
         self.canal = canal or ctx.channel
     
-    @ui.button(label="✅ Confirmar", style=ButtonStyle.danger, emoji="⚠️")
-    async def confirmar(self, interaction: discord.Interaction, button: ui.Button):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user != self.ctx.author:
             await interaction.response.send_message("❌ Apenas quem executou pode confirmar!", ephemeral=True)
-            return
-        
+            return False
+        return True
+    
+    @ui.button(label="✅ Confirmar", style=ButtonStyle.danger, emoji="⚠️")
+    async def confirmar(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         
         # Deletar mensagens
@@ -40,13 +44,11 @@ class ConfirmarLimpezaView(ui.View):
     
     @ui.button(label="❌ Cancelar", style=ButtonStyle.secondary)
     async def cancelar(self, interaction: discord.Interaction, button: ui.Button):
-        if interaction.user != self.ctx.author:
-            await interaction.response.send_message("❌ Apenas quem executou pode cancelar!", ephemeral=True)
-            return
-        
         await interaction.response.defer()
         await interaction.message.delete()
-        await self.ctx.send("❌ Limpeza cancelada.", delete_after=5)
+        msg = await self.ctx.send("❌ Limpeza cancelada.")
+        await asyncio.sleep(3)
+        await msg.delete()
 
 # ========== MODAL DE LIMPEZA ==========
 class LimpezaQuantidadeModal(ui.Modal, title="🧹 Limpar por Quantidade"):
@@ -119,12 +121,14 @@ class LimpezaView(ui.View):
         self.cog = cog
         self.ctx = ctx
     
-    @ui.button(label="🧹 Limpar por Quantidade", style=ButtonStyle.primary, emoji="🔢", row=0)
-    async def limpar_quantidade(self, interaction: discord.Interaction, button: ui.Button):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user != self.ctx.author:
             await interaction.response.send_message("❌ Apenas quem executou pode usar!", ephemeral=True)
-            return
-        
+            return False
+        return True
+    
+    @ui.button(label="🧹 Limpar por Quantidade", style=ButtonStyle.primary, emoji="🔢", row=0)
+    async def limpar_quantidade(self, interaction: discord.Interaction, button: ui.Button):
         modal = LimpezaQuantidadeModal(self.cog, self.ctx)
         await interaction.response.send_modal(modal)
 
@@ -159,9 +163,13 @@ class LimpezaCog(commands.Cog):
             await msg.delete()
             
         except discord.Forbidden:
-            await ctx.send("❌ Não tenho permissão para apagar mensagens neste canal!", delete_after=5)
+            msg = await ctx.send("❌ Não tenho permissão para apagar mensagens neste canal!")
+            await asyncio.sleep(5)
+            await msg.delete()
         except Exception as e:
-            await ctx.send(f"❌ Erro: {e}", delete_after=5)
+            msg = await ctx.send(f"❌ Erro: {e}")
+            await asyncio.sleep(5)
+            await msg.delete()
     
     @commands.command(name="limpar", aliases=["clean", "clear"])
     async def limpar(self, ctx, quantidade: int = None, canal: discord.TextChannel = None):
@@ -177,8 +185,20 @@ class LimpezaCog(commands.Cog):
         
         # Verificar permissão
         if not usuario_pode_limpar(ctx.author):
-            await ctx.send("❌ Você não tem permissão para usar este comando!", delete_after=5)
+            msg = await ctx.send("❌ Você não tem permissão para usar este comando!")
+            await asyncio.sleep(5)
+            await msg.delete()
+            try:
+                await ctx.message.delete()
+            except:
+                pass
             return
+        
+        # Apagar comando do usuário
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         
         # Se não especificou quantidade, mostra menu interativo
         if quantidade is None:
@@ -206,7 +226,9 @@ class LimpezaCog(commands.Cog):
         
         # Verificar quantidade
         if quantidade < 1 or quantidade > 999:
-            await ctx.send("❌ Quantidade deve ser entre 1 e 999!", delete_after=5)
+            msg = await ctx.send("❌ Quantidade deve ser entre 1 e 999!")
+            await asyncio.sleep(5)
+            await msg.delete()
             return
         
         # Definir canal alvo
@@ -220,11 +242,15 @@ class LimpezaCog(commands.Cog):
         """🧹 Limpa mensagens com confirmação"""
         
         if not usuario_pode_limpar(ctx.author):
-            await ctx.send("❌ Você não tem permissão!", delete_after=5)
+            msg = await ctx.send("❌ Você não tem permissão!")
+            await asyncio.sleep(5)
+            await msg.delete()
             return
         
         if quantidade < 1 or quantidade > 999:
-            await ctx.send("❌ Quantidade deve ser entre 1 e 999!", delete_after=5)
+            msg = await ctx.send("❌ Quantidade deve ser entre 1 e 999!")
+            await asyncio.sleep(5)
+            await msg.delete()
             return
         
         canal_alvo = canal or ctx.channel
