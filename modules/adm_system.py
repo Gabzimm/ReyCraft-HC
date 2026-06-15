@@ -9,7 +9,6 @@ import asyncio
 DATA_FILE = "adm_roles.json"
 
 def load_adm_roles():
-    """Carrega a lista de cargos ADM do arquivo"""
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r") as f:
@@ -19,25 +18,13 @@ def load_adm_roles():
     return []
 
 def save_adm_roles(roles):
-    """Salva a lista de cargos ADM no arquivo"""
     try:
         with open(DATA_FILE, "w") as f:
             json.dump(roles, f, indent=4)
     except Exception as e:
         print(f"Erro ao salvar ADM roles: {e}")
 
-# ========== FUNÇÃO PARA VERIFICAR SE É DONO ==========
-def is_owner(member: discord.Member) -> bool:
-    if not member:
-        return False
-    if member.id == member.guild.owner_id:
-        return True
-    for role in member.roles:
-        if "owner" in role.name.lower():
-            return True
-    return False
-
-# ========== FUNÇÃO PARA VERIFICAR STAFF (CORRIGIDA) ==========
+# ========== FUNÇÕES DE PERMISSÃO ==========
 def is_staff(member: discord.Member) -> bool:
     """Verifica se o membro tem permissão de staff"""
     if not member:
@@ -47,7 +34,7 @@ def is_staff(member: discord.Member) -> bool:
     if member.id == member.guild.owner_id:
         return True
     
-    # Cargo Owner
+    # CARGO OWNER
     for role in member.roles:
         if "owner" in role.name.lower():
             return True
@@ -56,7 +43,7 @@ def is_staff(member: discord.Member) -> bool:
     if member.guild_permissions.administrator:
         return True
     
-    # Carregar cargos ADM configurados
+    # Cargos ADM configurados
     adm_roles = load_adm_roles()
     for role in member.roles:
         if role.name in adm_roles:
@@ -64,7 +51,23 @@ def is_staff(member: discord.Member) -> bool:
     
     return False
 
-# ========== MODAL PARA ESCOLHER CARGO ==========
+def can_use_adm(member: discord.Member) -> bool:
+    """Quem pode usar !adm: Dono OU cargo com Owner no nome"""
+    if not member:
+        return False
+    
+    # Dono do servidor
+    if member.id == member.guild.owner_id:
+        return True
+    
+    # CARGO OWNER
+    for role in member.roles:
+        if "owner" in role.name.lower():
+            return True
+    
+    return False
+
+# ========== MODAL ==========
 class EscolherCargoModal(ui.Modal, title="➕ Adicionar Cargo ADM"):
     nome_cargo = ui.TextInput(
         label="Nome exato do cargo:",
@@ -110,7 +113,7 @@ class EscolherCargoModal(ui.Modal, title="➕ Adicionar Cargo ADM"):
             save_adm_roles(adm_roles)
             await interaction.followup.send(f"✅ Cargo `{cargo.name}` removido da lista!", ephemeral=True)
 
-# ========== VIEW DE LISTA DE CARGOS ==========
+# ========== VIEW DE LISTA ==========
 class ListaCargosView(ui.View):
     def __init__(self, cog, ctx, modo, current_page=0):
         super().__init__(timeout=120)
@@ -193,7 +196,7 @@ class ListaCargosView(ui.View):
         new_view = ListaCargosView(self.cog, self.ctx, self.modo, self.current_page + 1)
         await interaction.response.edit_message(view=new_view)
 
-# ========== VIEW PRINCIPAL DO PAINEL ADM ==========
+# ========== PAINEL PRINCIPAL ==========
 class AdmPainelView(ui.View):
     def __init__(self, cog, ctx):
         super().__init__(timeout=120)
@@ -274,7 +277,7 @@ class AdmPainelView(ui.View):
             embed = discord.Embed(title="📋 Cargos com Permissão de Staff", description=f"**Total:** {len(adm_roles)}\n\n{lista}", color=discord.Color.blue())
         await interaction.response.edit_message(embed=embed, view=self)
 
-# ========== COG PRINCIPAL ==========
+# ========== COG ==========
 class AdmCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -287,14 +290,17 @@ class AdmCog(commands.Cog):
             description=f"Aqui você pode gerenciar quais cargos terão permissão de staff.\n\n**📋 Staffs atuais:**\n{', '.join(adm_roles) if adm_roles else 'Nenhum cargo configurado'}",
             color=discord.Color.purple()
         )
-        embed.set_footer(text="⚠️ Apenas Dono pode alterar essas configurações")
+        embed.set_footer(text="⚠️ Apenas Dono ou Owners podem alterar essas configurações")
         view = AdmPainelView(self, await self.bot.get_context(interaction.message))
         await interaction.edit_original_response(embed=embed, view=view)
     
     @commands.command(name="adm")
     async def adm_painel(self, ctx):
-        if ctx.author.id != ctx.guild.owner_id:
-            msg = await ctx.send("❌ **Apenas o Dono do servidor pode usar este comando!**")
+        """👑 Painel de gerenciamento de ADMs"""
+        
+        # Verificar se é Dono ou tem cargo Owner
+        if not can_use_adm(ctx.author):
+            msg = await ctx.send("❌ **Apenas o Dono do servidor ou cargos com 'Owner' podem usar este comando!**")
             await asyncio.sleep(3)
             await msg.delete()
             await ctx.message.delete()
@@ -311,7 +317,7 @@ class AdmCog(commands.Cog):
             description=f"Aqui você pode gerenciar quais cargos terão permissão de staff.\n\n**📋 Staffs atuais:**\n{', '.join(adm_roles) if adm_roles else 'Nenhum cargo configurado'}",
             color=discord.Color.purple()
         )
-        embed.set_footer(text="⚠️ Apenas Dono pode alterar essas configurações")
+        embed.set_footer(text="⚠️ Apenas Dono ou Owners podem alterar essas configurações")
         view = AdmPainelView(self, ctx)
         await ctx.send(embed=embed, view=view)
 
