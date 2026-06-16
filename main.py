@@ -363,6 +363,7 @@ async def carregar_modulos():
         'modules.antigolpe',
         'modules.logs',
         'modules.booster',
+        'modules.clans',
     ]
     
     for modulo in modulos:
