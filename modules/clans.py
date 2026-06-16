@@ -14,7 +14,7 @@ from utils.memory import load_guild_data, save_guild_data
 
 # ========== CONFIGURAÇÕES ==========
 CANAL_PAINEL_ID = 1516443229770350623
-CARGO_BASE_ID = 1516526627977302166
+CARGO_BASE_ID = 1516456654063931432
 CANAL_BASE_CLANS_ID = 1516443229770350623
 LIMITE_PADRAO = 8
 
@@ -40,24 +40,11 @@ def tem_cla(member: discord.Member) -> bool:
             if role and role in member.roles:
                 return True
     
-    # Verificar também por nome do cargo
     for role in member.roles:
         if role.name.startswith("⚔️ "):
             return True
     
     return False
-
-def get_cla_do_membro(member: discord.Member):
-    """Retorna os dados do clã que o membro pertence"""
-    clans = carregar_clans(member.guild.id)
-    
-    for clan_id, clan_data in clans.items():
-        cargo_id = clan_data.get("cargo_id")
-        if cargo_id:
-            role = member.guild.get_role(cargo_id)
-            if role and role in member.roles:
-                return clan_id, clan_data
-    return None, None
 
 def is_staff(member: discord.Member) -> bool:
     """Verifica se o membro é staff"""
@@ -290,23 +277,13 @@ class ModalCanalVoz2(ui.Modal, title="🎙️ Canal de Voz 2"):
     async def on_submit(self, interaction: discord.Interaction):
         nome_voz2 = self.nome_canal.value.strip().replace(" ", "-").lower()
         
-        print(f"[DEBUG] ModalCanalVoz2 - Enviando defer...")
         await interaction.response.defer(ephemeral=True)
         
-        print(f"[DEBUG] Cog: {self.cog}")
-        print(f"[DEBUG] Clã: {self.nome_cla}")
-        print(f"[DEBUG] Cargo: {self.cargo_cla.name if self.cargo_cla else 'None'}")
-        print(f"[DEBUG] Texto: {self.nome_texto}")
-        print(f"[DEBUG] Voz1: {self.nome_voz1}")
-        print(f"[DEBUG] Voz2: {nome_voz2}")
-        
         if self.cog is None:
-            print("[ERRO] Cog é None!")
             await interaction.followup.send("❌ Erro interno! Cog não encontrado.", ephemeral=True)
             return
         
         # Chamar a função de criar canais
-        print("[DEBUG] Chamando criar_canais_cla...")
         await self.cog.criar_canais_cla(
             interaction=interaction,
             user=interaction.user,
@@ -539,8 +516,9 @@ class GerenciarLimiteView(ui.View):
 
 # ========== PAINEL PRINCIPAL ==========
 class PainelCriarClaView(ui.View):
-    def __init__(self):
+    def __init__(self, bot):
         super().__init__(timeout=None)
+        self.bot = bot
     
     @ui.button(label="Crie o seu CLÃ!", style=ButtonStyle.primary, emoji="⚔️", custom_id="criar_cla_btn")
     async def criar_cla(self, interaction: discord.Interaction, button: ui.Button):
@@ -548,7 +526,10 @@ class PainelCriarClaView(ui.View):
             await interaction.response.send_message("❌ Você já pertence a um clã!", ephemeral=True)
             return
         
-        modal = ModalNomeCla(None)
+        # Pegar o cog do bot
+        cog = self.bot.get_cog("ClansCog")
+        
+        modal = ModalNomeCla(cog)
         await interaction.response.send_modal(modal)
 
 # ========== COG ==========
@@ -701,7 +682,7 @@ class ClansCog(commands.Cog):
         )
         embed.set_footer(text="ReyCraft HC • Sistema de Clãs")
         
-        view = PainelCriarClaView()
+        view = PainelCriarClaView(self.bot)
         
         await ctx.send(embed=embed, view=view)
         await ctx.message.delete()
@@ -711,5 +692,4 @@ class ClansCog(commands.Cog):
 # ========== SETUP ==========
 async def setup(bot):
     await bot.add_cog(ClansCog(bot))
-    bot.add_view(PainelCriarClaView())
     print("✅ Sistema de Clãs configurado!")
