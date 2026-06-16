@@ -7,7 +7,7 @@ from datetime import datetime
 CANAL_BOOST_ID = 1516395614194372679
 
 # ID do cargo VIP Booster (opcional - se quiser dar um cargo automático)
-CARGO_VIP_BOOSTER_ID = None  # ← COLOQUE O ID DO CARGO VIP BOOSTER AQUI (ou deixe None)
+CARGO_VIP_BOOSTER_ID = 1482825445077553243  # ← COLOQUE O ID DO CARGO VIP BOOSTER AQUI (ou deixe None)
 
 # ========== COG PRINCIPAL ==========
 class BoosterCog(commands.Cog):
@@ -55,7 +55,7 @@ class BoosterCog(commands.Cog):
             embed.set_thumbnail(url=member.display_avatar.url)
             
             # Adicionar imagem de boost (opcional - você pode mudar a URL)
-            embed.set_image(url="https://cdn.discordapp.com/attachments/123456789/boost_banner.gif")
+            embed.set_image(url="https://cdn.discordapp.com/attachments/1386344818833363006/1516449103242985653/ChatGPT_Image_16_de_jun._de_2026_15_25_23.png?ex=6a32aec8&is=6a315d48&hm=0e04514d0efaa9b048ba48332a42a712c6f770401b84a057ad479bc7a748e8f5")
             # OU use uma imagem estática:
             # embed.set_image(url="https://i.imgur.com/boost.png")
             
