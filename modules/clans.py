@@ -102,6 +102,15 @@ class ModalNomeCla(ui.Modal, title="⚔️ Criar Clã"):
                 )
                 return
         
+        # Verificar se já tem cargo de clã
+        for role in interaction.user.roles:
+            if role.name.startswith("⚔️ "):
+                await interaction.response.send_message(
+                    "❌ Você já tem um cargo de clã! Remova-o antes de criar outro.",
+                    ephemeral=True
+                )
+                return
+        
         await interaction.response.defer(ephemeral=True)
         
         # Criar cargo do clã
@@ -110,44 +119,68 @@ class ModalNomeCla(ui.Modal, title="⚔️ Criar Clã"):
             await interaction.followup.send("❌ Cargo base não encontrado! Contate um administrador.", ephemeral=True)
             return
         
-        # Criar cargo com as mesmas permissões do cargo base
-        cargo_cla = await interaction.guild.create_role(
-            name=f"⚔️ {nome}",
-            permissions=cargo_base.permissions,
-            color=discord.Color.from_rgb(88, 101, 242),  # Cor azul
-            hoist=True,
-            mentionable=True,
-            reason=f"Clã criado por {interaction.user.name}"
-        )
-        
-        # Dar o cargo para o criador
-        await interaction.user.add_roles(cargo_cla)
-        
-        # Salvar dados do clã
-        clan_id = str(interaction.user.id)
-        clans[clan_id] = {
-            "nome": nome,
-            "cargo_id": cargo_cla.id,
-            "dono_id": interaction.user.id,
-            "limite": LIMITE_PADRAO,
-            "membros": [interaction.user.id],
-            "canais": {},
-            "criado_em": datetime.now().isoformat()
-        }
-        salvar_clans(interaction.guild.id, clans)
-        
-        # Mostrar modal para criar canais
-        view = CriarCanaisView(self.cog, interaction.user, nome, cargo_cla)
-        embed = discord.Embed(
-            title="✅ Clã criado com sucesso!",
-            description=f"Seu clã **{nome}** foi criado!\n\nAgora vamos configurar seus canais:",
-            color=discord.Color.green()
-        )
-        
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        try:
+            # Criar cargo com as mesmas permissões do cargo base
+            cargo_cla = await interaction.guild.create_role(
+                name=f"⚔️ {nome}",
+                permissions=cargo_base.permissions,
+                color=discord.Color.from_rgb(88, 101, 242),
+                hoist=True,
+                mentionable=True,
+                reason=f"Clã criado por {interaction.user.name}"
+            )
+            
+            # Dar o cargo para o criador
+            await interaction.user.add_roles(cargo_cla)
+            
+            # Salvar dados do clã
+            clan_id = str(interaction.user.id)
+            clans[clan_id] = {
+                "nome": nome,
+                "cargo_id": cargo_cla.id,
+                "dono_id": interaction.user.id,
+                "limite": LIMITE_PADRAO,
+                "membros": [interaction.user.id],
+                "canais": {},
+                "criado_em": datetime.now().isoformat()
+            }
+            salvar_clans(interaction.guild.id, clans)
+            
+            # ✅ CORRIGIDO: Enviar mensagem com botão para abrir o próximo modal
+            embed = discord.Embed(
+                title="✅ Clã criado com sucesso!",
+                description=f"Seu clã **{nome}** foi criado com sucesso!\n"
+                           f"Cargo: {cargo_cla.mention}\n\n"
+                           f"**Próximo passo:** Configure o nome do seu canal de texto.",
+                color=discord.Color.green()
+            )
+            
+            # Botão para abrir o modal do canal de texto
+            view = BotaoCanalTextoView(self.cog, nome, cargo_cla)
+            
+            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+            
+        except Exception as e:
+            print(f"❌ Erro ao criar clã: {e}")
+            await interaction.followup.send(f"❌ Erro ao criar clã: {str(e)[:100]}", ephemeral=True)
 
-# ========== MODAL PARA NOME DO CANAL DE TEXTO ==========
-class ModalCanalTexto(ui.Modal, title="📝 Canal de Texto"):
+
+# ========== VIEW COM BOTÃO PARA ABRIR MODAL DO CANAL DE TEXTO ==========
+class BotaoCanalTextoView(ui.View):
+    def __init__(self, cog, nome_cla, cargo_cla):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.nome_cla = nome_cla
+        self.cargo_cla = cargo_cla
+    
+    @ui.button(label="📝 Nomear Canal de Texto", style=ButtonStyle.primary, emoji="📝")
+    async def abrir_modal_texto(self, interaction: discord.Interaction, button: ui.Button):
+        modal = ModalCanalTexto(self.cog, self.nome_cla, self.cargo_cla)
+        await interaction.response.send_modal(modal)
+
+
+# ========== MODAL PARA CANAL DE TEXTO ==========
+class ModalCanalTexto(ui.Modal, title="📝 Nome do Canal de Texto"):
     nome_canal = ui.TextInput(
         label="Nome do canal de texto:",
         placeholder="Ex: 💬-chat-do-cla",
@@ -156,38 +189,61 @@ class ModalCanalTexto(ui.Modal, title="📝 Canal de Texto"):
         min_length=3
     )
     
-    def __init__(self, cog, user, nome_cla, cargo_cla):
+    def __init__(self, cog, nome_cla, cargo_cla):
         super().__init__()
         self.cog = cog
-        self.user = user
         self.nome_cla = nome_cla
         self.cargo_cla = cargo_cla
     
     async def on_submit(self, interaction: discord.Interaction):
-        nome_texto = self.nome_cargo.value.strip().replace(" ", "-").lower()
+        nome_texto = self.nome_canal.value.strip().replace(" ", "-").lower()
         
         await interaction.response.defer(ephemeral=True)
         
         # Salvar nome do canal de texto temporariamente
         clans = carregar_clans(interaction.guild.id)
-        clan_id = str(self.user.id)
         
-        if clan_id in clans:
+        # Encontrar o clã pelo cargo
+        clan_id = None
+        for cid, cdata in clans.items():
+            if cdata["cargo_id"] == self.cargo_cla.id:
+                clan_id = cid
+                break
+        
+        if clan_id and clan_id in clans:
             clans[clan_id]["canais"]["texto_nome"] = nome_texto
             salvar_clans(interaction.guild.id, clans)
         
-        # Mostrar modal para primeiro canal de voz
-        view = CriarCanalVoz1View(self.cog, self.user, self.nome_cla, self.cargo_cla, nome_texto)
+        # Enviar botão para próximo modal
         embed = discord.Embed(
-            title="🎙️ Canal de Voz 1",
-            description=f"Canal de texto: **{nome_texto}**\n\nAgora escolha o nome do **primeiro canal de voz**:",
+            title="🎙️ Configurar Canal de Voz 1",
+            description=f"Canal de texto definido: **{nome_texto}**\n\n"
+                       f"Agora escolha o nome do **primeiro canal de voz**:",
             color=discord.Color.blue()
         )
         
+        view = BotaoCanalVoz1View(self.cog, self.nome_cla, self.cargo_cla, nome_texto)
+        
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
+
+# ========== VIEW COM BOTÃO PARA CANAL DE VOZ 1 ==========
+class BotaoCanalVoz1View(ui.View):
+    def __init__(self, cog, nome_cla, cargo_cla, nome_texto):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.nome_cla = nome_cla
+        self.cargo_cla = cargo_cla
+        self.nome_texto = nome_texto
+    
+    @ui.button(label="🎙️ Nomear Canal de Voz 1", style=ButtonStyle.primary, emoji="🎙️")
+    async def abrir_modal_voz1(self, interaction: discord.Interaction, button: ui.Button):
+        modal = ModalCanalVoz1(self.cog, self.nome_cla, self.cargo_cla, self.nome_texto)
+        await interaction.response.send_modal(modal)
+
+
 # ========== MODAL PARA CANAL DE VOZ 1 ==========
-class ModalCanalVoz1(ui.Modal, title="🎙️ Canal de Voz 1"):
+class ModalCanalVoz1(ui.Modal, title="🎙️ Nome do Canal de Voz 1"):
     nome_canal = ui.TextInput(
         label="Nome do primeiro canal de voz:",
         placeholder="Ex: 🔉-voz-do-cla",
@@ -196,39 +252,63 @@ class ModalCanalVoz1(ui.Modal, title="🎙️ Canal de Voz 1"):
         min_length=3
     )
     
-    def __init__(self, cog, user, nome_cla, cargo_cla, nome_texto):
+    def __init__(self, cog, nome_cla, cargo_cla, nome_texto):
         super().__init__()
         self.cog = cog
-        self.user = user
         self.nome_cla = nome_cla
         self.cargo_cla = cargo_cla
         self.nome_texto = nome_texto
     
     async def on_submit(self, interaction: discord.Interaction):
-        nome_voz1 = self.nome_cargo.value.strip().replace(" ", "-").lower()
+        nome_voz1 = self.nome_canal.value.strip().replace(" ", "-").lower()
         
         await interaction.response.defer(ephemeral=True)
         
         # Salvar nome do canal de voz 1
         clans = carregar_clans(interaction.guild.id)
-        clan_id = str(self.user.id)
         
-        if clan_id in clans:
+        clan_id = None
+        for cid, cdata in clans.items():
+            if cdata["cargo_id"] == self.cargo_cla.id:
+                clan_id = cid
+                break
+        
+        if clan_id and clan_id in clans:
             clans[clan_id]["canais"]["voz1_nome"] = nome_voz1
             salvar_clans(interaction.guild.id, clans)
         
-        # Mostrar modal para segundo canal de voz
-        view = CriarCanalVoz2View(self.cog, self.user, self.nome_cla, self.cargo_cla, self.nome_texto, nome_voz1)
+        # Botão para último modal
         embed = discord.Embed(
-            title="🎙️ Canal de Voz 2",
-            description=f"Canal de texto: **{self.nome_texto}**\nCanal de voz 1: **{nome_voz1}**\n\nAgora escolha o nome do **segundo canal de voz**:",
+            title="🎙️ Configurar Canal de Voz 2",
+            description=f"Canal de texto: **{self.nome_texto}**\n"
+                       f"Canal de voz 1: **{nome_voz1}**\n\n"
+                       f"Agora escolha o nome do **segundo canal de voz**:",
             color=discord.Color.blue()
         )
         
+        view = BotaoCanalVoz2View(self.cog, self.nome_cla, self.cargo_cla, self.nome_texto, nome_voz1)
+        
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
+
+# ========== VIEW COM BOTÃO PARA CANAL DE VOZ 2 ==========
+class BotaoCanalVoz2View(ui.View):
+    def __init__(self, cog, nome_cla, cargo_cla, nome_texto, nome_voz1):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.nome_cla = nome_cla
+        self.cargo_cla = cargo_cla
+        self.nome_texto = nome_texto
+        self.nome_voz1 = nome_voz1
+    
+    @ui.button(label="🎙️ Nomear Canal de Voz 2", style=ButtonStyle.primary, emoji="🎙️")
+    async def abrir_modal_voz2(self, interaction: discord.Interaction, button: ui.Button):
+        modal = ModalCanalVoz2(self.cog, self.nome_cla, self.cargo_cla, self.nome_texto, self.nome_voz1)
+        await interaction.response.send_modal(modal)
+
+
 # ========== MODAL PARA CANAL DE VOZ 2 ==========
-class ModalCanalVoz2(ui.Modal, title="🎙️ Canal de Voz 2"):
+class ModalCanalVoz2(ui.Modal, title="🎙️ Nome do Canal de Voz 2"):
     nome_canal = ui.TextInput(
         label="Nome do segundo canal de voz:",
         placeholder="Ex: 🔊-voz-do-cla-2",
@@ -237,24 +317,23 @@ class ModalCanalVoz2(ui.Modal, title="🎙️ Canal de Voz 2"):
         min_length=3
     )
     
-    def __init__(self, cog, user, nome_cla, cargo_cla, nome_texto, nome_voz1):
+    def __init__(self, cog, nome_cla, cargo_cla, nome_texto, nome_voz1):
         super().__init__()
         self.cog = cog
-        self.user = user
         self.nome_cla = nome_cla
         self.cargo_cla = cargo_cla
         self.nome_texto = nome_texto
         self.nome_voz1 = nome_voz1
     
     async def on_submit(self, interaction: discord.Interaction):
-        nome_voz2 = self.nome_cargo.value.strip().replace(" ", "-").lower()
+        nome_voz2 = self.nome_canal.value.strip().replace(" ", "-").lower()
         
         await interaction.response.defer(ephemeral=True)
         
         # Criar todos os canais agora
         await self.cog.criar_canais_cla(
             interaction,
-            self.user,
+            interaction.user,
             self.nome_cla,
             self.cargo_cla,
             self.nome_texto,
