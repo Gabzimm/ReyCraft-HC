@@ -362,6 +362,7 @@ async def carregar_modulos():
         'modules.tickets',
         'modules.antigolpe',
         'modules.logs',
+        'modules.booster',
     ]
     
     for modulo in modulos:
