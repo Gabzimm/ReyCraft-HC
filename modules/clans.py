@@ -14,9 +14,9 @@ from utils.memory import load_guild_data, save_guild_data
 
 # ========== CONFIGURAÇÕES ==========
 CANAL_PAINEL_ID = 1516443229770350623
-CARGO_BASE_ID = 1516456654063931432
+CARGO_BASE_ID = 1516526627977302166
 CANAL_BASE_CLANS_ID = 1516443229770350623
-CATEGORIA_BASE_ID = 1516443229770350623  # ID da categoria base para copiar permissões
+CATEGORIA_BASE_ID = 1517656643494477835  # ID da categoria base para copiar permissões
 LIMITE_PADRAO = 8
 
 # ========== FUNÇÕES AUXILIARES ==========
