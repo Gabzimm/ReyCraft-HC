@@ -13,9 +13,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.memory import load_guild_data, save_guild_data
 
 # ========== CONFIGURAÇÕES ==========
-CANAL_PAINEL_ID = 1516443229770350623
-CARGO_BASE_ID = 1516526627977302166
-CANAL_BASE_CLANS_ID = 1516443229770350623
+CANAL_PAINEL_ID = 1516443229770350623  # Canal onde o painel será postado
+CARGO_BASE_ID = 1516526627977302166    # Cargo para copiar permissões
+CATEGORIA_BASE_ID = 1516442856116584608  # ID da CATEGORIA base (onde as categorias dos clãs ficarão abaixo)
 LIMITE_PADRAO = 8
 
 # Emoji personalizado do servidor
@@ -74,7 +74,6 @@ class ModalNomeCla(ui.Modal, title="⚔️ Criar Clã"):
     async def on_submit(self, interaction: discord.Interaction):
         nome = self.nome_cla.value.strip()
         
-        # Verificações
         if tem_cla(interaction.user):
             await interaction.response.send_message("❌ Você já pertence a um clã!", ephemeral=True)
             return
@@ -87,7 +86,6 @@ class ModalNomeCla(ui.Modal, title="⚔️ Criar Clã"):
         
         await interaction.response.defer(ephemeral=True)
         
-        # Criar cargo
         cargo_base = interaction.guild.get_role(CARGO_BASE_ID)
         if not cargo_base:
             await interaction.followup.send("❌ Cargo base não encontrado!", ephemeral=True)
@@ -105,7 +103,6 @@ class ModalNomeCla(ui.Modal, title="⚔️ Criar Clã"):
             
             await interaction.user.add_roles(cargo_cla)
             
-            # Salvar
             clan_id = str(interaction.user.id)
             clans[clan_id] = {
                 "nome": nome,
@@ -119,7 +116,6 @@ class ModalNomeCla(ui.Modal, title="⚔️ Criar Clã"):
             }
             salvar_clans(interaction.guild.id, clans)
             
-            # Próximo passo
             embed = discord.Embed(
                 title="✅ Clã criado!",
                 description=f"**{nome}** criado com sucesso!\nCargo: {cargo_cla.mention}\n\nAgora configure seus canais:",
@@ -167,7 +163,6 @@ class ModalCanalTexto(ui.Modal, title="📝 Canal de Texto"):
         
         await interaction.response.defer(ephemeral=True)
         
-        # Salvar
         clans = carregar_clans(interaction.guild.id)
         clan_id = None
         for cid, cdata in clans.items():
@@ -224,7 +219,6 @@ class ModalCanalVoz1(ui.Modal, title="🎙️ Canal de Voz 1"):
         
         await interaction.response.defer(ephemeral=True)
         
-        # Salvar
         clans = carregar_clans(interaction.guild.id)
         clan_id = None
         for cid, cdata in clans.items():
@@ -284,7 +278,7 @@ class ModalCanalVoz2(ui.Modal, title="🎙️ Canal de Voz 2"):
         await interaction.response.defer(ephemeral=True)
         
         if self.cog is None:
-            await interaction.followup.send("❌ Erro interno! Cog não encontrado.", ephemeral=True)
+            await interaction.followup.send("❌ Erro interno!", ephemeral=True)
             return
         
         await self.cog.criar_canais_cla(
@@ -297,7 +291,7 @@ class ModalCanalVoz2(ui.Modal, title="🎙️ Canal de Voz 2"):
             nome_voz2=nome_voz2
         )
 
-# ========== VIEW DE CONFIRMAÇÃO DE EXCLUSÃO ==========
+# ========== CONFIRMAR EXCLUSÃO ==========
 class ConfirmarExclusaoView(ui.View):
     def __init__(self, cog, clan_id, guild_id):
         super().__init__(timeout=30)
@@ -323,7 +317,7 @@ class PainelClaView(ui.View):
         self.clan_id = clan_id
         self.guild_id = guild_id
     
-    @ui.button(label="➕ Adicionar jogador ao clã!", style=ButtonStyle.success, emoji="➕", custom_id="cla_add_membro", row=0)
+    @ui.button(label="➕ Adicionar jogador ao clã!", style=ButtonStyle.success, emoji="➕", custom_id="cla_add", row=0)
     async def adicionar_membro(self, interaction: discord.Interaction, button: ui.Button):
         clans = carregar_clans(interaction.guild.id)
         clan_data = clans.get(self.clan_id)
@@ -343,7 +337,7 @@ class PainelClaView(ui.View):
         modal = ModalAdicionarMembro(self.clan_id)
         await interaction.response.send_modal(modal)
     
-    @ui.button(label="➖ Remover jogador do clã!", style=ButtonStyle.danger, emoji="➖", custom_id="cla_remove_membro", row=0)
+    @ui.button(label="➖ Remover jogador do clã!", style=ButtonStyle.danger, emoji="➖", custom_id="cla_remove", row=0)
     async def remover_membro(self, interaction: discord.Interaction, button: ui.Button):
         clans = carregar_clans(interaction.guild.id)
         clan_data = clans.get(self.clan_id)
@@ -388,7 +382,7 @@ class PainelClaView(ui.View):
     @ui.button(label="🗑️ Excluir Clã", style=ButtonStyle.danger, emoji="🗑️", custom_id="cla_excluir", row=1)
     async def excluir_cla(self, interaction: discord.Interaction, button: ui.Button):
         if not is_staff(interaction.user):
-            await interaction.response.send_message("❌ Apenas staff pode excluir clãs!", ephemeral=True)
+            await interaction.response.send_message("❌ Apenas staff!", ephemeral=True)
             return
         
         clans = carregar_clans(interaction.guild.id)
@@ -404,11 +398,10 @@ class PainelClaView(ui.View):
                 f"**Clã:** {clan_data['nome']}\n"
                 f"**Dono:** <@{clan_data['dono_id']}>\n"
                 f"**Membros:** {len(clan_data['membros'])}\n\n"
-                "⚠️ **Esta ação é IRREVERSÍVEL!**\n\n"
-                "Serão excluídos:\n"
-                "• Todos os canais do clã\n"
-                "• A categoria do clã\n"
-                "• O cargo do clã\n\n"
+                "⚠️ **IRREVERSÍVEL!**\n\n"
+                "• Todos os canais\n"
+                "• A categoria\n"
+                "• O cargo\n\n"
                 "**Tem certeza?**"
             ),
             color=discord.Color.red()
@@ -580,7 +573,6 @@ class PainelCriarClaView(ui.View):
             return
         
         cog = self.bot.get_cog("ClansCog")
-        
         modal = ModalNomeCla(cog)
         await interaction.response.send_modal(modal)
 
@@ -591,7 +583,7 @@ class ClansCog(commands.Cog):
         print("✅ Módulo de Clãs carregado!")
     
     async def criar_canais_cla(self, interaction, user, nome_cla, cargo_cla, nome_texto, nome_voz1, nome_voz2):
-        """Cria todos os canais do clã com categoria própria ABAIXO do canal base"""
+        """Cria categoria abaixo da categoria base e canais dentro dela"""
         try:
             guild = interaction.guild
             
@@ -601,19 +593,18 @@ class ClansCog(commands.Cog):
             print(f"[CLÃ] Voz 1: {nome_voz1}")
             print(f"[CLÃ] Voz 2: {nome_voz2}")
             
-            # Pegar canal base
-            canal_base = guild.get_channel(CANAL_BASE_CLANS_ID)
-            if not canal_base:
-                await interaction.followup.send("❌ Canal base não encontrado!", ephemeral=True)
+            # Pegar categoria base
+            categoria_base = guild.get_channel(CATEGORIA_BASE_ID)
+            if not categoria_base or not isinstance(categoria_base, discord.CategoryChannel):
+                await interaction.followup.send("❌ Categoria base não encontrada!", ephemeral=True)
                 return
             
-            print(f"[CLÃ] Canal base: {canal_base.name}")
+            print(f"[CLÃ] Categoria base: {categoria_base.name} (posição: {categoria_base.position})")
             
-            # Criar categoria ABAIXO do canal base
+            # Nome da categoria do clã
             nome_categoria = f"・ {nome_cla}"
-            print(f"[CLÃ] Criando categoria: {nome_categoria}")
             
-            # Configurar permissões da categoria
+            # Permissões da categoria
             overwrites_categoria = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False, connect=False, speak=False),
                 cargo_cla: discord.PermissionOverwrite(read_messages=True, send_messages=True, connect=True, speak=True, read_message_history=True),
@@ -632,23 +623,28 @@ class ClansCog(commands.Cog):
             except:
                 pass
             
-            # Criar categoria posicionada após o canal base
+            # 1. Criar categoria
+            print(f"[CLÃ] Criando categoria: {nome_categoria}")
             categoria_cla = await guild.create_category(
                 name=nome_categoria,
                 overwrites=overwrites_categoria,
-                position=canal_base.position + 1,  # Abaixo do canal base
                 reason=f"Categoria do clã {nome_cla}"
             )
-            print(f"[CLÃ] ✅ Categoria criada: {categoria_cla.name} (posição: {categoria_cla.position})")
+            print(f"[CLÃ] ✅ Categoria criada (posição: {categoria_cla.position})")
             
-            # Overwrites para os canais
+            # 2. Mover para abaixo da categoria base
+            nova_posicao = categoria_base.position + 1
+            await categoria_cla.edit(position=nova_posicao)
+            print(f"[CLÃ] ✅ Categoria movida para posição: {nova_posicao}")
+            
+            # Permissões dos canais
             overwrites_canais = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False, connect=False, speak=False),
                 cargo_cla: discord.PermissionOverwrite(read_messages=True, send_messages=True, connect=True, speak=True),
                 guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True, connect=True)
             }
             
-            # Criar canal de texto
+            # 3. Criar canal de texto
             print(f"[CLÃ] Criando canal de texto: {nome_texto}")
             canal_texto = await guild.create_text_channel(
                 name=nome_texto,
@@ -658,7 +654,7 @@ class ClansCog(commands.Cog):
             )
             print(f"[CLÃ] ✅ Texto: {canal_texto.name}")
             
-            # Criar canal de voz 1
+            # 4. Criar canal de voz 1
             print(f"[CLÃ] Criando canal de voz 1: {nome_voz1}")
             canal_voz1 = await guild.create_voice_channel(
                 name=nome_voz1,
@@ -667,7 +663,7 @@ class ClansCog(commands.Cog):
             )
             print(f"[CLÃ] ✅ Voz 1: {canal_voz1.name}")
             
-            # Criar canal de voz 2
+            # 5. Criar canal de voz 2
             print(f"[CLÃ] Criando canal de voz 2: {nome_voz2}")
             canal_voz2 = await guild.create_voice_channel(
                 name=nome_voz2,
@@ -676,7 +672,7 @@ class ClansCog(commands.Cog):
             )
             print(f"[CLÃ] ✅ Voz 2: {canal_voz2.name}")
             
-            # Salvar
+            # Salvar dados
             clans = carregar_clans(guild.id)
             clan_id = None
             for cid, cdata in clans.items():
@@ -694,7 +690,7 @@ class ClansCog(commands.Cog):
                 salvar_clans(guild.id, clans)
                 print(f"[CLÃ] ✅ Dados salvos!")
             
-            # Painel no canal de texto (usando emoji personalizado)
+            # Painel no canal de texto
             embed = discord.Embed(
                 title=f"{EMOJI_CLANS} ADICIONAR MEMBROS AO CLÃ",
                 description=(
@@ -711,7 +707,6 @@ class ClansCog(commands.Cog):
             view = PainelClaView(self, clan_id if clan_id else str(user.id), guild.id)
             await canal_texto.send(f"{EMOJI_CLANS} **Bem-vindos ao clã {nome_cla}** {EMOJI_CLANS}", embed=embed, view=view)
             
-            # Responder ao usuário
             await interaction.followup.send(
                 f"✅ **Clã criado!**\n\n"
                 f"📁 Categoria: {categoria_cla.name}\n"
@@ -744,31 +739,17 @@ class ClansCog(commands.Cog):
                 await interaction.followup.send("❌ Clã não encontrado!", ephemeral=True)
                 return
             
-            print(f"\n[CLÃ] ========== EXCLUINDO CLÃ ==========")
-            print(f"[CLÃ] Clã: {clan_data['nome']}")
+            print(f"\n[CLÃ] ========== EXCLUINDO: {clan_data['nome']} ==========")
             
             canais = clan_data.get("canais", {})
             
-            texto_id = canais.get("texto_id")
-            if texto_id:
-                canal = guild.get_channel(texto_id)
-                if canal:
-                    await canal.delete()
-                    print(f"[CLÃ] ✅ Canal de texto excluído")
-            
-            voz1_id = canais.get("voz1_id")
-            if voz1_id:
-                canal = guild.get_channel(voz1_id)
-                if canal:
-                    await canal.delete()
-                    print(f"[CLÃ] ✅ Canal de voz 1 excluído")
-            
-            voz2_id = canais.get("voz2_id")
-            if voz2_id:
-                canal = guild.get_channel(voz2_id)
-                if canal:
-                    await canal.delete()
-                    print(f"[CLÃ] ✅ Canal de voz 2 excluído")
+            for chave in ["texto_id", "voz1_id", "voz2_id"]:
+                canal_id = canais.get(chave)
+                if canal_id:
+                    canal = guild.get_channel(canal_id)
+                    if canal:
+                        await canal.delete()
+                        print(f"[CLÃ] ✅ Canal excluído: {canal.name}")
             
             categoria_id = clan_data.get("categoria_id")
             if categoria_id:
@@ -786,25 +767,16 @@ class ClansCog(commands.Cog):
             
             del clans[clan_id]
             salvar_clans(guild.id, clans)
-            print(f"[CLÃ] ✅ Dados removidos")
             
-            await interaction.followup.send(
-                f"✅ **Clã `{clan_data['nome']}` excluído com sucesso!**\n\n"
-                f"🗑️ Canais excluídos\n"
-                f"🗑️ Categoria excluída\n"
-                f"🗑️ Cargo excluído",
-                ephemeral=True
-            )
-            
+            await interaction.followup.send(f"✅ Clã **{clan_data['nome']}** excluído!", ephemeral=True)
             print(f"[CLÃ] ========== EXCLUSÃO CONCLUÍDA ==========\n")
             
         except Exception as e:
-            print(f"[CLÃ] ❌ ERRO ao excluir: {e}")
+            print(f"[CLÃ] ❌ ERRO: {e}")
             import traceback
             traceback.print_exc()
-            
             try:
-                await interaction.followup.send(f"❌ Erro ao excluir: {str(e)[:200]}", ephemeral=True)
+                await interaction.followup.send(f"❌ Erro: {str(e)[:200]}", ephemeral=True)
             except:
                 pass
     
