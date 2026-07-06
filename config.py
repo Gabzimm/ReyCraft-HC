@@ -10,7 +10,7 @@ from typing import Final
 # ============================================
 
 # Endereço do servidor Minecraft (IP:PORTA ou domínio:porta)
-SERVER_ADDRESS: Final[str] = "seu-servidor.com:25565"
+SERVER_ADDRESS: Final[str] = "reycrafthc.enderman.cloud:35089"
 
 # ============================================
 # CONFIGURAÇÕES DO DISCORD
