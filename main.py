@@ -365,6 +365,7 @@ async def carregar_modulos():
         'modules.booster',
         'modules.clans',
         'modules.msg',
+        'modules.status',
     ]
     
     for modulo in modulos:
