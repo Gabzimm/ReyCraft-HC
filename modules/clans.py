@@ -15,10 +15,9 @@ from utils.memory import load_guild_data, save_guild_data
 # ========== CONFIGURAÇÕES ==========
 CANAL_PAINEL_ID = 1516443229770350623 
 CARGO_BASE_ID = 1516526627977302166
-CATEGORIA_BASE_ID = 1516442856116584608  # ID da CATEGORIA base
+CATEGORIA_BASE_ID = 1516442856116584608 # ID da CATEGORIA base
 LIMITE_PADRAO = 8
 
-# Emoji personalizado do servidor
 EMOJI_CLANS = "<:Clans:1516442579489788088>"
 
 # ========== FUNÇÕES AUXILIARES ==========
@@ -287,13 +286,175 @@ class ModalCanalVoz2(ui.Modal, title="🎙️ Canal de Voz 2"):
             nome_voz2=nome_voz2
         )
 
-# ========== VIEW DE SELEÇÃO DE MEMBRO (ADICIONAR) COM PAGINAÇÃO ==========
-class SelecionarMembroAddView(ui.View):
-    def __init__(self, clan_id, guild, dono_id, pagina=0):
+# ========== VIEW DE CONVITE NO CANAL PRIVADO ==========
+class ConviteClaView(ui.View):
+    def __init__(self, clan_id, guild_id, convidado_id, dono_id, dono_nome, canal_privado_id, cog):
+        super().__init__(timeout=300)
+        self.clan_id = clan_id
+        self.guild_id = guild_id
+        self.convidado_id = convidado_id
+        self.dono_id = dono_id
+        self.dono_nome = dono_nome
+        self.canal_privado_id = canal_privado_id
+        self.cog = cog
+    
+    @ui.button(label="✅ Aceitar", style=ButtonStyle.success, emoji="✅")
+    async def aceitar(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user.id != self.convidado_id:
+            await interaction.response.send_message("❌ Este convite não é para você!", ephemeral=True)
+            return
+        
+        guild = interaction.guild
+        clans = carregar_clans(guild.id)
+        clan_data = clans.get(self.clan_id)
+        
+        if not clan_data:
+            await interaction.response.send_message("❌ Este clã não existe mais!", ephemeral=True)
+            return
+        
+        if tem_cla(interaction.user):
+            await interaction.response.send_message("❌ Você já pertence a um clã!", ephemeral=True)
+            return
+        
+        if len(clan_data["membros"]) >= clan_data["limite"]:
+            await interaction.response.send_message(f"❌ O clã atingiu o limite de {clan_data['limite']} membros!", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Adicionar ao clã
+        cargo = guild.get_role(clan_data["cargo_id"])
+        if cargo:
+            await interaction.user.add_roles(cargo)
+        
+        clan_data["membros"].append(interaction.user.id)
+        salvar_clans(guild.id, clans)
+        
+        # ✅ Aceitou (confirmação) - CONVIDADO - EFÊMERA
+        await interaction.followup.send(
+            f"✅ Você entrou no clã **{clan_data['nome']}**!",
+            ephemeral=True
+        )
+        
+        # DELETAR CANAL PRIVADO
+        canal_privado = guild.get_channel(self.canal_privado_id)
+        if canal_privado:
+            await canal_privado.delete()
+        
+        # ✅ Aceitou (notificação) - DONO - EFÊMERA no canal do clã
+        canais = clan_data.get("canais", {})
+        texto_id = canais.get("texto_id")
+        if texto_id:
+            canal_cla = guild.get_channel(texto_id)
+            if canal_cla:
+                embed_dono = discord.Embed(
+                    title="✅ Convite Aceito!",
+                    description=f"{interaction.user.mention} **aceitou** seu convite e entrou no clã **{clan_data['nome']}**!",
+                    color=discord.Color.green()
+                )
+                embed_dono.set_footer(text=f"📊 {len(clan_data['membros'])}/{clan_data['limite']} membros")
+                await canal_cla.send(
+                    content=f"||{interaction.guild.get_member(self.dono_id).mention if interaction.guild.get_member(self.dono_id) else ''}||",
+                    embed=embed_dono,
+                    delete_after=15
+                )
+        
+        # ✅ Aceitou (público) - TODOS - Temporária (30s)
+        if texto_id:
+            canal = guild.get_channel(texto_id)
+            if canal:
+                await canal.send(
+                    f"✅ {interaction.user.mention} **aceitou** o convite e entrou no clã!\n"
+                    f"📊 {len(clan_data['membros'])}/{clan_data['limite']} membros",
+                    delete_after=30
+                )
+    
+    @ui.button(label="❌ Recusar", style=ButtonStyle.danger, emoji="❌")
+    async def recusar(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user.id != self.convidado_id:
+            await interaction.response.send_message("❌ Este convite não é para você!", ephemeral=True)
+            return
+        
+        guild = interaction.guild
+        clans = carregar_clans(guild.id)
+        clan_data = clans.get(self.clan_id)
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # ❌ Recusou (confirmação) - CONVIDADO - EFÊMERA
+        await interaction.followup.send(
+            f"❌ Você recusou o convite para entrar no clã **{clan_data['nome'] if clan_data else 'desconhecido'}**.",
+            ephemeral=True
+        )
+        
+        # DELETAR CANAL PRIVADO
+        canal_privado = guild.get_channel(self.canal_privado_id)
+        if canal_privado:
+            await canal_privado.delete()
+        
+        # ❌ Recusou (notificação) - DONO - EFÊMERA no canal do clã
+        if clan_data:
+            canais = clan_data.get("canais", {})
+            texto_id = canais.get("texto_id")
+            if texto_id:
+                canal_cla = guild.get_channel(texto_id)
+                if canal_cla:
+                    embed_dono = discord.Embed(
+                        title="❌ Convite Recusado",
+                        description=(
+                            f"O jogador {interaction.user.mention} **recusou** seu convite "
+                            f"para entrar no clã **{clan_data['nome']}**.\n\n"
+                            f"💡 Você precisará enviar o convite novamente."
+                        ),
+                        color=discord.Color.red()
+                    )
+                    await canal_cla.send(
+                        content=f"||{interaction.guild.get_member(self.dono_id).mention if interaction.guild.get_member(self.dono_id) else ''}||",
+                        embed=embed_dono,
+                        delete_after=15
+                    )
+    
+    async def on_timeout(self):
+        """Quando o convite expira (5 minutos)"""
+        try:
+            guild = self.cog.bot.get_guild(self.guild_id)
+            if guild:
+                canal_privado = guild.get_channel(self.canal_privado_id)
+                if canal_privado:
+                    await canal_privado.delete()
+                
+                clans = carregar_clans(guild.id)
+                clan_data = clans.get(self.clan_id)
+                if clan_data:
+                    canais = clan_data.get("canais", {})
+                    texto_id = canais.get("texto_id")
+                    if texto_id:
+                        canal_cla = guild.get_channel(texto_id)
+                        if canal_cla:
+                            embed = discord.Embed(
+                                title="⏰ Convite Expirado",
+                                description=f"O convite para o clã **{clan_data['nome']}** expirou após 5 minutos.",
+                                color=discord.Color.orange()
+                            )
+                            await canal_cla.send(
+                                content=f"||{guild.get_member(self.dono_id).mention if guild.get_member(self.dono_id) else ''}||",
+                                embed=embed,
+                                delete_after=15
+                            )
+        except:
+            pass
+        
+        self.stop()
+
+
+# ========== VIEW DE SELEÇÃO DE MEMBRO PARA CONVIDAR ==========
+class SelecionarMembroConviteView(ui.View):
+    def __init__(self, clan_id, guild, dono_id, cog, pagina=0):
         super().__init__(timeout=180)
         self.clan_id = clan_id
         self.guild = guild
         self.dono_id = dono_id
+        self.cog = cog
         self.pagina = pagina
         
         clans = carregar_clans(guild.id)
@@ -315,7 +476,7 @@ class SelecionarMembroAddView(ui.View):
         membros_pagina = self.membros_disponiveis[inicio:fim]
         
         select = ui.Select(
-            placeholder=f"🔍 Jogadores disponíveis (Página {pagina + 1}/{self.total_paginas})",
+            placeholder=f"📨 Convidar jogador (Página {pagina + 1}/{self.total_paginas})",
             min_values=1,
             max_values=1,
             row=0
@@ -376,24 +537,86 @@ class SelecionarMembroAddView(ui.View):
         
         await interaction.response.defer(ephemeral=True)
         
-        cargo = self.guild.get_role(clan_data["cargo_id"])
-        if cargo:
-            await member.add_roles(cargo)
-        
-        clan_data["membros"].append(member.id)
-        salvar_clans(self.guild.id, clans)
-        
-        for item in self.children:
-            item.disabled = True
-        self.children[0].placeholder = f"✅ {member.display_name} adicionado!"
-        
-        await interaction.edit_original_response(view=self)
-        
-        await interaction.followup.send(
-            f"✅ {member.mention} adicionado ao clã **{clan_data['nome']}**!\n"
-            f"📊 {len(clan_data['membros'])}/{clan_data['limite']}",
-            ephemeral=True
-        )
+        try:
+            categoria_base = self.guild.get_channel(CATEGORIA_BASE_ID)
+            if not categoria_base:
+                await interaction.followup.send("❌ Categoria base não encontrada!", ephemeral=True)
+                return
+            
+            # Criar canal privado
+            overwrites = {
+                self.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
+                member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                self.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            }
+            
+            # Adicionar permissão para ADMs e cargo máximo
+            try:
+                from modules.adm_system import load_adm_roles, load_cargo_max
+                
+                # ADMs
+                adm_roles = load_adm_roles(self.guild.id)
+                for role_name in adm_roles:
+                    role = discord.utils.get(self.guild.roles, name=role_name)
+                    if role:
+                        overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                
+                # Cargo máximo
+                cargo_max_nome = load_cargo_max(self.guild.id)
+                cargo_max = discord.utils.get(self.guild.roles, name=cargo_max_nome)
+                if cargo_max:
+                    overwrites[cargo_max] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            except:
+                pass
+            
+            nome_canal = f"📨-convite-para-{member.display_name.lower().replace(' ', '-')[:30]}"
+            
+            canal_privado = await self.guild.create_text_channel(
+                name=nome_canal,
+                category=categoria_base,
+                overwrites=overwrites,
+                topic=f"Convite para {member.display_name} entrar no clã {clan_data['nome']} | Expira em 5 minutos"
+            )
+            
+            embed_convite = discord.Embed(
+                title="📨 Convite de Clã",
+                description=(
+                    f"Você recebeu um convite de {interaction.user.mention}\n"
+                    f"para entrar no clã **{clan_data['nome']}**\n\n"
+                    f"Você deseja entrar nele?"
+                ),
+                color=discord.Color.blue()
+            )
+            embed_convite.set_footer(text=f"Clã: {clan_data['nome']} | O convite expira em 5 minutos")
+            
+            view_convite = ConviteClaView(
+                self.clan_id,
+                self.guild.id,
+                member.id,
+                interaction.user.id,
+                interaction.user.display_name,
+                canal_privado.id,
+                self.cog
+            )
+            
+            await canal_privado.send(
+                content=f"{member.mention} {interaction.user.mention}",
+                embed=embed_convite,
+                view=view_convite
+            )
+            
+            await interaction.followup.send(
+                f"📨 Convite enviado para {member.mention}!\n\n"
+                f"📁 Canal criado: {canal_privado.mention}\n"
+                f"⏳ **Aguarde até que {member.display_name} aceite o convite.**\n"
+                f"💡 Caso ele recuse ou expire (5min), o canal será deletado automaticamente.\n"
+                f"🔄 Se recusar, você precisará enviar o convite novamente.",
+                ephemeral=True
+            )
+            
+        except Exception as e:
+            await interaction.followup.send(f"❌ Erro ao criar canal de convite: {e}", ephemeral=True)
     
     async def pagina_anterior(self, interaction: discord.Interaction):
         if interaction.user.id != self.dono_id:
@@ -401,7 +624,7 @@ class SelecionarMembroAddView(ui.View):
             return
         
         await interaction.response.defer()
-        nova_view = SelecionarMembroAddView(self.clan_id, self.guild, self.dono_id, self.pagina - 1)
+        nova_view = SelecionarMembroConviteView(self.clan_id, self.guild, self.dono_id, self.cog, self.pagina - 1)
         await interaction.edit_original_response(view=nova_view)
     
     async def pagina_proxima(self, interaction: discord.Interaction):
@@ -410,11 +633,11 @@ class SelecionarMembroAddView(ui.View):
             return
         
         await interaction.response.defer()
-        nova_view = SelecionarMembroAddView(self.clan_id, self.guild, self.dono_id, self.pagina + 1)
+        nova_view = SelecionarMembroConviteView(self.clan_id, self.guild, self.dono_id, self.cog, self.pagina + 1)
         await interaction.edit_original_response(view=nova_view)
 
 
-# ========== VIEW DE SELEÇÃO DE MEMBRO (REMOVER) COM PAGINAÇÃO ==========
+# ========== VIEW DE SELEÇÃO DE MEMBRO (REMOVER) ==========
 class SelecionarMembroRemoveView(ui.View):
     def __init__(self, clan_id, guild, dono_id, pagina=0):
         super().__init__(timeout=180)
@@ -554,6 +777,74 @@ class ConfirmarExclusaoView(ui.View):
         await interaction.message.delete()
 
 
+# ========== CONFIRMAR SAÍDA DO CLÃ ==========
+class ConfirmarSaidaView(ui.View):
+    def __init__(self, clan_id, guild_id, membro_id):
+        super().__init__(timeout=30)
+        self.clan_id = clan_id
+        self.guild_id = guild_id
+        self.membro_id = membro_id
+    
+    @ui.button(label="✅ Sim, sair do clã!", style=ButtonStyle.danger)
+    async def confirmar(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user.id != self.membro_id:
+            await interaction.response.send_message("❌ Esta ação não é para você!", ephemeral=True)
+            return
+        
+        guild = interaction.guild
+        clans = carregar_clans(guild.id)
+        clan_data = clans.get(self.clan_id)
+        
+        if not clan_data:
+            await interaction.response.send_message("❌ Clã não encontrado!", ephemeral=True)
+            return
+        
+        if interaction.user.id == clan_data["dono_id"]:
+            await interaction.response.send_message(
+                "❌ O dono não pode sair do clã! Use o botão de excluir ou transfira a liderança.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        cargo = guild.get_role(clan_data["cargo_id"])
+        if cargo:
+            await interaction.user.remove_roles(cargo)
+        
+        if interaction.user.id in clan_data["membros"]:
+            clan_data["membros"].remove(interaction.user.id)
+        
+        salvar_clans(guild.id, clans)
+        
+        for item in self.children:
+            item.disabled = True
+        self.children[0].label = "✅ Você saiu do clã!"
+        
+        await interaction.edit_original_response(view=self)
+        
+        await interaction.followup.send(
+            f"✅ Você saiu do clã **{clan_data['nome']}**!",
+            ephemeral=True
+        )
+        
+        canais = clan_data.get("canais", {})
+        texto_id = canais.get("texto_id")
+        if texto_id:
+            canal = guild.get_channel(texto_id)
+            if canal:
+                await canal.send(
+                    f"👋 {interaction.user.mention} **saiu do clã**.\n"
+                    f"📊 {len(clan_data['membros'])}/{clan_data['limite']} membros",
+                    delete_after=30
+                )
+    
+    @ui.button(label="❌ Cancelar", style=ButtonStyle.secondary)
+    async def cancelar(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        await interaction.message.delete()
+
+
 # ========== PAINEL DO CLÃ ==========
 class PainelClaView(ui.View):
     def __init__(self, cog, clan_id, guild_id):
@@ -562,8 +853,8 @@ class PainelClaView(ui.View):
         self.clan_id = clan_id
         self.guild_id = guild_id
     
-    @ui.button(label="➕ Adicionar jogador ao clã!", style=ButtonStyle.success, emoji="➕", custom_id="cla_add", row=0)
-    async def adicionar_membro(self, interaction: discord.Interaction, button: ui.Button):
+    @ui.button(label="📨 Convidar jogador", style=ButtonStyle.success, emoji="📨", custom_id="cla_convidar", row=0)
+    async def convidar_membro(self, interaction: discord.Interaction, button: ui.Button):
         clans = carregar_clans(interaction.guild.id)
         clan_data = clans.get(self.clan_id)
         
@@ -572,24 +863,57 @@ class PainelClaView(ui.View):
             return
         
         if interaction.user.id != clan_data["dono_id"]:
-            await interaction.response.send_message("❌ Apenas o dono pode adicionar!", ephemeral=True)
+            await interaction.response.send_message("❌ Apenas o dono pode convidar!", ephemeral=True)
             return
         
         if len(clan_data["membros"]) >= clan_data["limite"]:
             await interaction.response.send_message(f"❌ Limite atingido ({clan_data['limite']})!", ephemeral=True)
             return
         
-        view = SelecionarMembroAddView(self.clan_id, interaction.guild, clan_data["dono_id"])
+        view = SelecionarMembroConviteView(self.clan_id, interaction.guild, clan_data["dono_id"], self.cog)
         
         embed = discord.Embed(
-            title="➕ Adicionar Jogador ao Clã",
-            description=f"**Clã:** {clan_data['nome']}\n**Vagas:** {len(clan_data['membros'])}/{clan_data['limite']}\n\nSelecione o jogador abaixo:",
+            title="📨 Convidar Jogador ao Clã",
+            description=f"**Clã:** {clan_data['nome']}\n**Vagas:** {len(clan_data['membros'])}/{clan_data['limite']}\n\nSelecione o jogador para enviar o convite:",
             color=discord.Color.green()
         )
         
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
-    @ui.button(label="➖ Remover jogador do clã!", style=ButtonStyle.danger, emoji="➖", custom_id="cla_remove", row=0)
+    @ui.button(label="🚪 Sair do Clã", style=ButtonStyle.danger, emoji="🚪", custom_id="cla_sair", row=0)
+    async def sair_cla(self, interaction: discord.Interaction, button: ui.Button):
+        clans = carregar_clans(interaction.guild.id)
+        clan_data = clans.get(self.clan_id)
+        
+        if not clan_data:
+            await interaction.response.send_message("❌ Clã não encontrado!", ephemeral=True)
+            return
+        
+        if interaction.user.id not in clan_data["membros"]:
+            await interaction.response.send_message("❌ Você não pertence a este clã!", ephemeral=True)
+            return
+        
+        if interaction.user.id == clan_data["dono_id"]:
+            await interaction.response.send_message(
+                "❌ Você é o dono do clã! Transfira a liderança ou exclua o clã.",
+                ephemeral=True
+            )
+            return
+        
+        embed = discord.Embed(
+            title="🚪 Sair do Clã",
+            description=(
+                f"**Clã:** {clan_data['nome']}\n\n"
+                "⚠️ Tem certeza que deseja sair do clã?\n\n"
+                "Você perderá o acesso aos canais do clã."
+            ),
+            color=discord.Color.orange()
+        )
+        
+        view = ConfirmarSaidaView(self.clan_id, interaction.guild.id, interaction.user.id)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    
+    @ui.button(label="➖ Remover jogador", style=ButtonStyle.danger, emoji="➖", custom_id="cla_remove", row=1)
     async def remover_membro(self, interaction: discord.Interaction, button: ui.Button):
         clans = carregar_clans(interaction.guild.id)
         clan_data = clans.get(self.clan_id)
@@ -739,20 +1063,43 @@ class ClansCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         print("✅ Módulo de Clãs carregado!")
+        
+        self.bot.add_view(PainelCriarClaView(bot))
+        asyncio.create_task(self.recarregar_paineis())
+    
+    async def recarregar_paineis(self):
+        await self.bot.wait_until_ready()
+        print("[CLÃ] 🔄 Recarregando painéis dos clãs...")
+        
+        for guild in self.bot.guilds:
+            clans = carregar_clans(guild.id)
+            print(f"[CLÃ]    Servidor: {guild.name} - {len(clans)} clãs encontrados")
+            
+            for clan_id, clan_data in clans.items():
+                canais = clan_data.get("canais", {})
+                texto_id = canais.get("texto_id")
+                
+                if texto_id:
+                    canal = guild.get_channel(texto_id)
+                    if canal:
+                        view = PainelClaView(self, clan_id, guild.id)
+                        self.bot.add_view(view)
+                        print(f"[CLÃ]    ✅ Painel recarregado: {clan_data['nome']}")
+                    else:
+                        print(f"[CLÃ]    ⚠️ Canal não encontrado para: {clan_data['nome']}")
+                else:
+                    print(f"[CLÃ]    ⚠️ Clan sem canal de texto: {clan_data['nome']}")
+        
+        print("[CLÃ] ✅ Recarregamento concluído!")
     
     async def criar_canais_cla(self, interaction, user, nome_cla, cargo_cla, nome_texto, nome_voz1, nome_voz2):
         try:
             guild = interaction.guild
             
-            print(f"\n[CLÃ] ========== INICIANDO CRIAÇÃO ==========")
-            print(f"[CLÃ] Clã: {nome_cla}")
-            
             categoria_base = guild.get_channel(CATEGORIA_BASE_ID)
             if not categoria_base or not isinstance(categoria_base, discord.CategoryChannel):
                 await interaction.followup.send("❌ Categoria base não encontrada!", ephemeral=True)
                 return
-            
-            print(f"[CLÃ] Categoria base: {categoria_base.name} (posição: {categoria_base.position})")
             
             nome_categoria = f"・ {nome_cla}"
             
@@ -762,18 +1109,27 @@ class ClansCog(commands.Cog):
                 guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True, connect=True)
             }
             
+            # Adicionar ADMs e cargo máximo
             try:
-                from modules.adm_system import load_adm_roles
-                for role_name in load_adm_roles():
+                from modules.adm_system import load_adm_roles, load_cargo_max
+                
+                adm_roles = load_adm_roles(guild.id)
+                for role_name in adm_roles:
                     role = discord.utils.get(guild.roles, name=role_name)
                     if role:
                         overwrites_categoria[role] = discord.PermissionOverwrite(
                             read_messages=True, send_messages=True, connect=True, speak=True
                         )
+                
+                cargo_max_nome = load_cargo_max(guild.id)
+                cargo_max = discord.utils.get(guild.roles, name=cargo_max_nome)
+                if cargo_max:
+                    overwrites_categoria[cargo_max] = discord.PermissionOverwrite(
+                        read_messages=True, send_messages=True, connect=True, speak=True
+                    )
             except:
                 pass
             
-            print(f"[CLÃ] Criando categoria: {nome_categoria}")
             categoria_cla = await guild.create_category(
                 name=nome_categoria,
                 overwrites=overwrites_categoria,
@@ -782,7 +1138,6 @@ class ClansCog(commands.Cog):
             
             nova_posicao = categoria_base.position + 1
             await categoria_cla.edit(position=nova_posicao)
-            print(f"[CLÃ] ✅ Categoria criada e movida para posição: {nova_posicao}")
             
             overwrites_canais = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False, connect=False, speak=False),
@@ -790,7 +1145,23 @@ class ClansCog(commands.Cog):
                 guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True, connect=True)
             }
             
-            print(f"[CLÃ] Criando canais...")
+            # Adicionar ADMs e cargo máximo aos canais também
+            try:
+                from modules.adm_system import load_adm_roles, load_cargo_max
+                
+                adm_roles = load_adm_roles(guild.id)
+                for role_name in adm_roles:
+                    role = discord.utils.get(guild.roles, name=role_name)
+                    if role:
+                        overwrites_canais[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                
+                cargo_max_nome = load_cargo_max(guild.id)
+                cargo_max = discord.utils.get(guild.roles, name=cargo_max_nome)
+                if cargo_max:
+                    overwrites_canais[cargo_max] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            except:
+                pass
+            
             canal_texto = await guild.create_text_channel(
                 name=nome_texto,
                 category=categoria_cla,
@@ -809,7 +1180,6 @@ class ClansCog(commands.Cog):
                 category=categoria_cla,
                 overwrites=overwrites_canais
             )
-            print(f"[CLÃ] ✅ Canais criados!")
             
             clans = carregar_clans(guild.id)
             clan_id = None
@@ -843,6 +1213,8 @@ class ClansCog(commands.Cog):
             view = PainelClaView(self, clan_id if clan_id else str(user.id), guild.id)
             await canal_texto.send(f"{EMOJI_CLANS} **Bem-vindos ao clã {nome_cla}** {EMOJI_CLANS}", embed=embed, view=view)
             
+            self.bot.add_view(view)
+            
             await interaction.followup.send(
                 f"✅ **Clã criado!**\n\n"
                 f"📁 Categoria: {categoria_cla.name}\n"
@@ -851,8 +1223,6 @@ class ClansCog(commands.Cog):
                 f"🎙️ {canal_voz2.mention}",
                 ephemeral=True
             )
-            
-            print(f"[CLÃ] ========== CRIAÇÃO CONCLUÍDA ==========\n")
             
         except Exception as e:
             print(f"[CLÃ] ❌ ERRO: {e}")
@@ -872,8 +1242,6 @@ class ClansCog(commands.Cog):
             if not clan_data:
                 await interaction.followup.send("❌ Clã não encontrado!", ephemeral=True)
                 return
-            
-            print(f"\n[CLÃ] ========== EXCLUINDO: {clan_data['nome']} ==========")
             
             canais = clan_data.get("canais", {})
             for chave in ["texto_id", "voz1_id", "voz2_id"]:
@@ -899,7 +1267,6 @@ class ClansCog(commands.Cog):
             salvar_clans(guild.id, clans)
             
             await interaction.followup.send(f"✅ Clã **{clan_data['nome']}** excluído!", ephemeral=True)
-            print(f"[CLÃ] ========== EXCLUSÃO CONCLUÍDA ==========\n")
             
         except Exception as e:
             print(f"[CLÃ] ❌ ERRO: {e}")
