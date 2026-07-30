@@ -1303,6 +1303,53 @@ class ClansCog(commands.Cog):
         
         print(f"✅ Painel de clãs configurado em #{ctx.channel.name}")
 
+# ========== ATUALIZAR PAINEL DE KILLS ==========
+
+async def atualizar_painel_kills(bot, guild_id, clan_id):
+    """Atualiza a linha de Kills no painel do clã já existente no Discord."""
+    clans = carregar_clans(guild_id)
+    clan_data = clans.get(clan_id)
+    if not clan_data:
+        return
+
+    canais = clan_data.get("canais", {})
+    texto_id = canais.get("texto_id")
+    msg_id = canais.get("mensagem_painel_id")
+    if not texto_id or not msg_id:
+        return  # clã criado antes dessa atualização, ainda não tem o ID salvo
+
+    guild = bot.get_guild(guild_id)
+    if not guild:
+        return
+    canal = guild.get_channel(texto_id)
+    if not canal:
+        return
+
+    try:
+        mensagem = await canal.fetch_message(msg_id)
+    except Exception:
+        return
+
+    if not mensagem.embeds:
+        return
+
+    embed = mensagem.embeds[0]
+    kills = clan_data.get("kills", 0)
+    mortes = clan_data.get("mortes", 0)
+
+    encontrado = False
+    for i, campo in enumerate(embed.fields):
+        if campo.name == "🗡️ Kills do Clã":
+            embed.set_field_at(i, name="🗡️ Kills do Clã", value=f"{kills} kills / {mortes} mortes", inline=False)
+            encontrado = True
+            break
+    if not encontrado:
+        embed.add_field(name="🗡️ Kills do Clã", value=f"{kills} kills / {mortes} mortes", inline=False)
+
+    try:
+        await mensagem.edit(embed=embed)
+    except Exception as e:
+        print(f"[CLÃ] ⚠️ Não consegui atualizar o painel de {clan_data['nome']}: {e}")
 
 # ========== SETUP ==========
 async def setup(bot):
