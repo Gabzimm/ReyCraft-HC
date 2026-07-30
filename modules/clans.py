@@ -1208,12 +1208,17 @@ class ClansCog(commands.Cog):
                 ),
                 color=discord.Color.blue()
             )
+            embed.add_field(name="🗡️ Kills do Clã", value="0 kills / 0 mortes", inline=False)
             embed.set_footer(text=f"Criado em: {datetime.now().strftime('%d/%m/%Y')}")
             
             view = PainelClaView(self, clan_id if clan_id else str(user.id), guild.id)
-            await canal_texto.send(f"{EMOJI_CLANS} **Bem-vindos ao clã {nome_cla}** {EMOJI_CLANS}", embed=embed, view=view)
+            mensagem_painel = await canal_texto.send(f"{EMOJI_CLANS} **Bem-vindos ao clã {nome_cla}** {EMOJI_CLANS}", embed=embed, view=view)
             
             self.bot.add_view(view)
+
+            if clan_id:
+                clans[clan_id]["canais"]["mensagem_painel_id"] = mensagem_painel.id
+                salvar_clans(guild.id, clans)
             
             await interaction.followup.send(
                 f"✅ **Clã criado!**\n\n"
