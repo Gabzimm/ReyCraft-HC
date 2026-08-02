@@ -5,6 +5,8 @@ import asyncio
 from datetime import datetime
 import sys
 import os
+import random
+import string
 
 # Adicionar caminho para importar utils
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -961,6 +963,14 @@ class PainelClaView(ui.View):
         
         view = GerenciarLimiteView(self.clan_id, clan_data['limite'])
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    def gerar_token_cla(clans_existentes):
+    """Gera um token curto e único (5 caracteres, letras maiúsculas + números)."""
+    tokens_em_uso = {c.get("token") for c in clans_existentes.values() if c.get("token")}
+    while True:
+        token = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        if token not in tokens_em_uso:
+            return token
     
     @ui.button(label="🗑️ Excluir Clã", style=ButtonStyle.danger, emoji="🗑️", custom_id="cla_excluir", row=1)
     async def excluir_cla(self, interaction: discord.Interaction, button: ui.Button):
@@ -1182,43 +1192,47 @@ class ClansCog(commands.Cog):
             )
             
             clans = carregar_clans(guild.id)
-            clan_id = None
-            for cid, cdata in clans.items():
-                if cdata.get("cargo_id") == cargo_cla.id:
-                    clan_id = cid
-                    break
-            
-            if clan_id:
-                clans[clan_id]["canais"] = {
-                    "texto_id": canal_texto.id,
-                    "voz1_id": canal_voz1.id,
-                    "voz2_id": canal_voz2.id
-                }
-                clans[clan_id]["categoria_id"] = categoria_cla.id
-                salvar_clans(guild.id, clans)
-            
-            embed = discord.Embed(
-                title=f"{EMOJI_CLANS} ADICIONAR MEMBROS AO CLÃ",
-                description=(
-                    f"**Clã:** {nome_cla}\n"
-                    f"**Dono:** {user.mention}\n\n"
-                    "Para adicionar novos jogadores ao seu clã, clique no botão abaixo.\n\n"
-                    f"✅ Limite gratuito: **{LIMITE_PADRAO} membros**.\n\n"
-                    "💎 Para aumentar o limite, veja **#💎・𝐕𝐈𝐏𝐬**."
-                ),
-                color=discord.Color.blue()
-            )
-            embed.add_field(name="🗡️ Kills do Clã", value="0 kills / 0 mortes", inline=False)
-            embed.set_footer(text=f"Criado em: {datetime.now().strftime('%d/%m/%Y')}")
-            
-            view = PainelClaView(self, clan_id if clan_id else str(user.id), guild.id)
-            mensagem_painel = await canal_texto.send(f"{EMOJI_CLANS} **Bem-vindos ao clã {nome_cla}** {EMOJI_CLANS}", embed=embed, view=view)
-            
-            self.bot.add_view(view)
+clan_id = None
+for cid, cdata in clans.items():
+    if cdata.get("cargo_id") == cargo_cla.id:
+        clan_id = cid
+        break
 
-            if clan_id:
-                clans[clan_id]["canais"]["mensagem_painel_id"] = mensagem_painel.id
-                salvar_clans(guild.id, clans)
+token_cla = gerar_token_cla(clans)
+
+if clan_id:
+    clans[clan_id]["canais"] = {
+        "texto_id": canal_texto.id,
+        "voz1_id": canal_voz1.id,
+        "voz2_id": canal_voz2.id
+    }
+    clans[clan_id]["categoria_id"] = categoria_cla.id
+    clans[clan_id]["token"] = token_cla
+    salvar_clans(guild.id, clans)
+
+embed = discord.Embed(
+    title=f"{EMOJI_CLANS} ADICIONAR MEMBROS AO CLÃ",
+    description=(
+        f"**Clã:** {nome_cla}\n"
+        f"**Dono:** {user.mention}\n\n"
+        "Para adicionar novos jogadores ao seu clã, clique no botão abaixo.\n\n"
+        f"✅ Limite gratuito: **{LIMITE_PADRAO} membros**.\n\n"
+        "💎 Para aumentar o limite, veja **#💎・𝐕𝐈𝐏𝐬**."
+    ),
+    color=discord.Color.blue()
+)
+embed.add_field(name="🔑 Token", value=f"`{token_cla}`", inline=True)
+embed.add_field(name="🗡️ Kills do Clã", value="0 kills / 0 mortes", inline=True)
+embed.set_footer(text=f"Criado em: {datetime.now().strftime('%d/%m/%Y')}")
+
+view = PainelClaView(self, clan_id if clan_id else str(user.id), guild.id)
+mensagem_painel = await canal_texto.send(f"{EMOJI_CLANS} **Bem-vindos ao clã {nome_cla}** {EMOJI_CLANS}", embed=embed, view=view)
+
+self.bot.add_view(view)
+
+if clan_id:
+    clans[clan_id]["canais"]["mensagem_painel_id"] = mensagem_painel.id
+    salvar_clans(guild.id, clans)
             
             await interaction.followup.send(
                 f"✅ **Clã criado!**\n\n"
@@ -1321,7 +1335,7 @@ async def atualizar_painel_kills(bot, guild_id, clan_id):
     texto_id = canais.get("texto_id")
     msg_id = canais.get("mensagem_painel_id")
     if not texto_id or not msg_id:
-        return  # clã criado antes dessa atualização, ainda não tem o ID salvo
+        return
 
     guild = bot.get_guild(guild_id)
     if not guild:
@@ -1345,11 +1359,11 @@ async def atualizar_painel_kills(bot, guild_id, clan_id):
     encontrado = False
     for i, campo in enumerate(embed.fields):
         if campo.name == "🗡️ Kills do Clã":
-            embed.set_field_at(i, name="🗡️ Kills do Clã", value=f"{kills} kills / {mortes} mortes", inline=False)
+            embed.set_field_at(i, name="🗡️ Kills do Clã", value=f"{kills} kills / {mortes} mortes", inline=True)
             encontrado = True
             break
     if not encontrado:
-        embed.add_field(name="🗡️ Kills do Clã", value=f"{kills} kills / {mortes} mortes", inline=False)
+        embed.add_field(name="🗡️ Kills do Clã", value=f"{kills} kills / {mortes} mortes", inline=True)
 
     try:
         await mensagem.edit(embed=embed)
